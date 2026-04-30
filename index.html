@@ -222,6 +222,7 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg
         <button class="search-clear" id="searchClear">✕</button>
       </div>
       <div class="filters" id="filterChips"></div>
+      <div class="filters" id="tagChips" style="display:none"></div>
     </div>
     <div id="discoverList"></div>
   </div>
@@ -244,11 +245,15 @@ main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg
 // ── FIREBASE INIT ──
 firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.firestore();
+db.enablePersistence({ synchronizeTabs: true }).catch(e => {
+  if (e.code !== 'failed-precondition' && e.code !== 'unimplemented') console.warn('Persistence:', e);
+});
 
 // ── STATE ──
 let allBeers = [];
 let settings = {};
 let activeFilter = 'all';
+let activeTagFilter = 'all';
 let activeTab = 'discover';
 const myList = new Set(JSON.parse(localStorage.getItem('bf_list') || '[]'));
 const triedSet = new Set(JSON.parse(localStorage.getItem('bf_tried') || '[]'));
@@ -323,6 +328,26 @@ function buildFilters() {
       renderDiscover();
     })
   );
+
+  // Tag filters — only show if any beers have tags
+  const usedTags = new Set(allBeers.flatMap(b => b.tags || []));
+  const tagWrap  = document.getElementById('tagChips');
+  const tagLabels = { gf:'Gluten Free', vegan:'Vegan', lo:'Low ABV' };
+  if (usedTags.size) {
+    tagWrap.style.display = '';
+    tagWrap.innerHTML = `<div class="chip active" data-t="all">Any</div>` +
+      [...usedTags].filter(t => tagLabels[t]).map(t => `<div class="chip" data-t="${t}">${tagLabels[t]}</div>`).join('');
+    tagWrap.querySelectorAll('.chip').forEach(c =>
+      c.addEventListener('click', () => {
+        activeTagFilter = c.dataset.t;
+        tagWrap.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+        c.classList.add('active');
+        renderDiscover();
+      })
+    );
+  } else {
+    tagWrap.style.display = 'none';
+  }
 }
 
 // ── SEARCH ──
@@ -340,8 +365,9 @@ function filteredBeers() {
   const q = searchInput.value.toLowerCase().trim();
   return allBeers.filter(b => {
     const matchFilter = activeFilter === 'all' || b.brewery === activeFilter;
+    const matchTag    = activeTagFilter === 'all' || (b.tags || []).includes(activeTagFilter);
     const matchSearch = !q || b.name.toLowerCase().includes(q) || b.brewery.toLowerCase().includes(q) || (b.style||'').toLowerCase().includes(q);
-    return matchFilter && matchSearch;
+    return matchFilter && matchTag && matchSearch;
   });
 }
 

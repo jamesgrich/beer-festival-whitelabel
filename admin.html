@@ -40,7 +40,8 @@
       }
       function isVendorOf(beerId) {
         return request.auth != null &&
-          get(/databases/$(database)/documents/beers/$(beerId)).data.vendorUid == request.auth.uid;
+          get(/databases/$(database)/documents/beers/$(beerId)).data.vendorUid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockStatus', 'updatedAt']);
       }
     }
   }
@@ -344,6 +345,7 @@ input,select,textarea,button{font-family:'Inter',sans-serif}
         <div style="display:flex;gap:.6rem">
           <input class="form-input" id="beerSearch" placeholder="Search…" style="width:180px;padding:.45rem .85rem;font-size:.82rem" oninput="renderBeers()">
           <button class="btn-secondary admin-only" onclick="openAddBeerModal()">+ Add Beer</button>
+          <button class="btn-danger admin-only" onclick="clearAllBeers()" style="opacity:.7" title="Delete all beers">Clear All</button>
         </div>
       </div>
       <div class="section-body" style="padding-top:1rem">
@@ -616,6 +618,10 @@ input,select,textarea,button{font-family:'Inter',sans-serif}
         <label class="form-label">Assigned Brewery</label>
         <input class="form-input" id="umBrewery" placeholder="Brewery name (must match beers exactly)">
       </div>
+      <div class="form-group" id="umAdminPasswordGroup" style="display:none">
+        <label class="form-label">Your Admin Password <span style="color:var(--sub);font-weight:400;text-transform:none;letter-spacing:0">(required to create vendor account)</span></label>
+        <input class="form-input" id="umAdminPassword" type="password" placeholder="Your current password" autocomplete="current-password">
+      </div>
       <div class="error-msg" id="userError"></div>
     </div>
     <div class="modal-footer">
@@ -633,6 +639,9 @@ input,select,textarea,button{font-family:'Inter',sans-serif}
 firebase.initializeApp(FIREBASE_CONFIG);
 const db  = firebase.firestore();
 const auth = firebase.auth();
+db.enablePersistence({ synchronizeTabs: true }).catch(e => {
+  if (e.code !== 'failed-precondition' && e.code !== 'unimplemented') console.warn('Persistence:', e);
+});
 
 // ── STATE ──
 let currentUser = null;
@@ -810,11 +819,21 @@ function handleLogoUpload(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
-    const url = e.target.result;
-    document.getElementById('settingLogoUrl').value = url;
-    document.getElementById('logoPreview').src = url;
-    document.getElementById('logoPreview').style.display = 'block';
-    document.getElementById('logoUploadText').style.display = 'none';
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxW = 600;
+      const scale = img.width > maxW ? maxW / img.width : 1;
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL('image/png', 0.85);
+      document.getElementById('settingLogoUrl').value = url;
+      document.getElementById('logoPreview').src = url;
+      document.getElementById('logoPreview').style.display = 'block';
+      document.getElementById('logoUploadText').style.display = 'none';
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
@@ -839,8 +858,8 @@ function renderBeers() {
     wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🍺</div><div class="empty-state-title">${allBeers.length ? 'No results' : 'No beers yet'}</div><p style="color:var(--sub);font-size:.83rem">${allBeers.length ? 'Try a different search' : 'Import beers using the Import tab'}</p></div>`;
     return;
   }
-  if (currentRole === 'vendor') {
-    wrap.innerHTML = beers.map(b => vendorBeerCard(b)).join('');
+  if (currentRole === 'vendor' || window.innerWidth < 768) {
+    wrap.innerHTML = beers.map(b => vendorBeerCard(b, currentRole === 'admin')).join('');
     return;
   }
   let html = `<div style="overflow-x:auto"><table class="beer-table"><thead><tr><th>Beer</th><th>Style / ABV</th><th>Stock</th><th>Vendor</th><th></th></tr></thead><tbody>`;
@@ -862,7 +881,7 @@ function renderBeers() {
   wrap.innerHTML = html;
 }
 
-function vendorBeerCard(b) {
+function vendorBeerCard(b, showEdit = false) {
   return `<div class="beer-row-card">
     <div class="brc-top">
       <div class="brc-info">
@@ -870,11 +889,14 @@ function vendorBeerCard(b) {
         <div class="brc-name">${b.name}</div>
         <div class="brc-meta">${b.style||''}${b.abv ? ` · ${b.abv}%` : ''}</div>
       </div>
-      <select class="stock-select-large ${b.stockStatus||'live'}" data-id="${b.id}" onchange="updateStock(this)">
-        <option value="live" ${b.stockStatus==='live'?'selected':''}>🟢 Available</option>
-        <option value="low" ${b.stockStatus==='low'?'selected':''}>🟡 Low Stock</option>
-        <option value="soldout" ${b.stockStatus==='soldout'?'selected':''}>🔴 Sold Out</option>
-      </select>
+      <div style="display:flex;flex-direction:column;gap:.5rem;align-items:flex-end;flex-shrink:0">
+        <select class="stock-select-large ${b.stockStatus||'live'}" data-id="${b.id}" onchange="updateStock(this)">
+          <option value="live" ${b.stockStatus==='live'?'selected':''}>🟢 Available</option>
+          <option value="low" ${b.stockStatus==='low'?'selected':''}>🟡 Low Stock</option>
+          <option value="soldout" ${b.stockStatus==='soldout'?'selected':''}>🔴 Sold Out</option>
+        </select>
+        ${showEdit ? `<button class="btn-edit" onclick="openEditBeerModal('${b.id}')">Edit</button>` : ''}
+      </div>
     </div>
   </div>`;
 }
@@ -986,6 +1008,18 @@ async function deleteBeer() {
   } catch(e) { showToast('Error deleting beer'); }
 }
 
+async function clearAllBeers() {
+  if (!confirm(`Delete all ${allBeers.length} beers? This cannot be undone. Use this to reset for a new festival year.`)) return;
+  const snap = await db.collection('beers').get();
+  let batch = db.batch(); let i = 0;
+  for (const doc of snap.docs) {
+    batch.delete(doc.ref); i++;
+    if (i % 400 === 0) { await batch.commit(); batch = db.batch(); }
+  }
+  await batch.commit();
+  showToast(`All beers deleted`);
+}
+
 // ── USERS ──
 async function loadUsers() {
   const snap = await db.collection('users').get();
@@ -1023,6 +1057,8 @@ function openAddUserModal() {
   document.getElementById('umBrewery').value = '';
   document.getElementById('userError').textContent = '';
   document.getElementById('umPasswordGroup').style.display = '';
+  document.getElementById('umAdminPasswordGroup').style.display = '';
+  document.getElementById('umAdminPassword').value = '';
   document.getElementById('userDeleteBtn').style.display = 'none';
   document.getElementById('saveUserBtn').textContent = 'Add Vendor';
   document.getElementById('userModalInfo').textContent = 'The vendor will use these credentials to log in and update their beers.';
@@ -1038,6 +1074,7 @@ function openEditUserModal(uid) {
   document.getElementById('umEmail').value   = user.email || '';
   document.getElementById('umBrewery').value = user.brewery || '';
   document.getElementById('umPasswordGroup').style.display = 'none';
+  document.getElementById('umAdminPasswordGroup').style.display = 'none';
   document.getElementById('userError').textContent = '';
   document.getElementById('userDeleteBtn').style.display = 'block';
   document.getElementById('saveUserBtn').textContent = 'Save Changes';
@@ -1063,8 +1100,8 @@ async function saveVendor() {
     } else {
       if (!password) { errEl.textContent = 'Password is required'; btn.disabled=false; btn.textContent='Add Vendor'; return; }
       const adminEmail    = auth.currentUser.email;
-      const adminPassword = prompt('Re-enter your admin password to create the vendor account:');
-      if (!adminPassword) { btn.disabled=false; btn.textContent='Add Vendor'; return; }
+      const adminPassword = document.getElementById('umAdminPassword').value;
+      if (!adminPassword) { errEl.textContent = 'Your admin password is required to create a vendor account'; btn.disabled=false; btn.textContent='Add Vendor'; return; }
       const newCred = await auth.createUserWithEmailAndPassword(email, password);
       const newUid  = newCred.user.uid;
       await db.collection('users').doc(newUid).set({ displayName: name, email, brewery, role: 'vendor', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
@@ -1106,6 +1143,7 @@ function handleCsvFile(file) {
 });
 
 function parseCsv(text) {
+  text = text.replace(/^﻿/, ''); // strip Excel BOM
   const lines = text.trim().split('\n');
   if (lines.length < 2) { showToast('CSV appears empty'); return; }
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z_]/g,''));
@@ -1240,20 +1278,34 @@ function showImportPreview(beers, containerId) {
 async function confirmImport(containerId) {
   if (!importPreviewData.length) return;
   const btn = document.querySelector(`#${containerId} .btn-primary`);
-  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking for duplicates…'; }
+
+  // Build set of existing brewery+name keys for duplicate detection
+  const existing = new Set(allBeers.map(b => `${b.brewery}||${b.name}`.toLowerCase()));
+  const toImport = importPreviewData.filter(b => !existing.has(`${b.brewery}||${b.name}`.toLowerCase()));
+  const skipped  = importPreviewData.length - toImport.length;
+
+  if (!toImport.length) {
+    document.getElementById(containerId).innerHTML = `<div class="empty-state" style="padding:2rem"><div class="empty-state-icon">⚠️</div><div class="empty-state-title">All ${skipped} beers already exist</div><p style="color:var(--sub);font-size:.83rem;margin-top:.5rem">No duplicates were imported.</p></div>`;
+    importPreviewData = [];
+    return;
+  }
+
+  if (btn) btn.textContent = `Importing ${toImport.length} beers…`;
   let count = 0;
-  const batch = db.batch();
-  for (const b of importPreviewData) {
+  let batch = db.batch();
+  for (const b of toImport) {
     const vendorUid = b.vendorEmail ? (allVendors.find(v => v.email === b.vendorEmail)?.id || null) : null;
     const ref = db.collection('beers').doc();
     batch.set(ref, { brewery: b.brewery, name: b.name, style: b.style||'', abv: b.abv||null, description: b.description||'', tags: b.tags||[], stockStatus: 'live', vendorUid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
     count++;
-    if (count % 400 === 0) { await batch.commit(); }
+    if (count % 400 === 0) { await batch.commit(); batch = db.batch(); }
   }
   await batch.commit();
-  document.getElementById(containerId).innerHTML = `<div class="empty-state" style="padding:2rem"><div class="empty-state-icon">✅</div><div class="empty-state-title">${count} beers imported</div></div>`;
+  const skippedNote = skipped > 0 ? ` (${skipped} duplicate${skipped!==1?'s':''} skipped)` : '';
+  document.getElementById(containerId).innerHTML = `<div class="empty-state" style="padding:2rem"><div class="empty-state-icon">✅</div><div class="empty-state-title">${count} beers imported${skippedNote}</div></div>`;
   importPreviewData = [];
-  showToast(`${count} beers imported ✓`);
+  showToast(`${count} beers imported ✓${skippedNote}`);
   showSection('beers', document.querySelector('[data-section="beers"]'));
 }
 

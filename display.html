@@ -185,7 +185,10 @@ header{
       <div class="hdr-stat-n" id="soldCount" style="color:#444">—</div>
       <div class="hdr-stat-l">Sold Out</div>
     </div>
-    <div class="hdr-time" id="clock">—</div>
+    <div style="text-align:right">
+      <div class="hdr-time" id="clock">—</div>
+      <div style="font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sub);margin-top:.2rem" id="lastUpdated"></div>
+    </div>
   </div>
 </header>
 
@@ -261,14 +264,25 @@ function applyTheme(s) {
 }
 
 // ── BEERS ──
+let lastUpdatedAt = null;
 db.collection('beers').orderBy('brewery').onSnapshot(snap => {
   allBeers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   breweries = [...new Set(allBeers.map(b => b.brewery))].sort();
+  lastUpdatedAt = new Date();
   updateStats();
   buildFilters();
   buildTicker();
   renderGrid();
+  updateLastUpdated();
 });
+
+function updateLastUpdated() {
+  const el = document.getElementById('lastUpdated');
+  if (!lastUpdatedAt || !el) return;
+  const mins = Math.floor((Date.now() - lastUpdatedAt) / 60000);
+  el.textContent = mins < 1 ? 'Updated just now' : `Updated ${mins}m ago`;
+}
+setInterval(updateLastUpdated, 30000);
 
 function updateStats() {
   document.getElementById('availCount').textContent = allBeers.filter(b => b.stockStatus === 'live').length;
