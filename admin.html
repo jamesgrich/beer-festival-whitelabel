@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Festival Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="config.js"></script>
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  FIRESTORE SECURITY RULES — paste into Firebase Console → Rules
+  ════════════════════════════════════════════════════════════════
+
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /settings/{doc} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      match /beers/{beerId} {
+        allow read: if true;
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin() || isVendorOf(beerId);
+      }
+      match /users/{uid} {
+        allow read: if request.auth.uid == uid || isAdmin();
+        allow write: if isAdmin();
+        allow create: if request.auth.uid == uid;
+      }
+      function isAdmin() {
+        return request.auth != null &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      }
+      function isVendorOf(beerId) {
+        return request.auth != null &&
+          get(/databases/$(database)/documents/beers/$(beerId)).data.vendorUid == request.auth.uid;
+      }
+    }
+  }
+
+  ════════════════════════════════════════════════════════════════
+-->
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --primary:#d4a843;--primary-d:#b88c2a;--primary-text:#000;
+  --bg:#0f0f0f;--panel:#161616;--card:#1e1e1e;--card2:#252525;
+  --border:#2c2c2c;--text:#fff;--sub:#888;--sub2:#555;
+  --live:#4caf50;--low:#ff9800;--sold:#f44336;
+  --danger:#e53935;--radius:12px;
+  --safe-top:env(safe-area-inset-top);--safe-bottom:env(safe-area-inset-bottom)
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column}
+a{color:inherit;text-decoration:none}
+input,select,textarea,button{font-family:'Inter',sans-serif}
+
+/* ── FULL PAGE STATES ── */
+.page{display:none;height:100%;flex-direction:column}
+.page.active{display:flex}
+
+/* ── LOGIN ── */
+#loginPage{align-items:center;justify-content:center;background:var(--bg)}
+.login-box{width:100%;max-width:380px;padding:2.5rem 2rem;background:var(--panel);border:1px solid var(--border);border-radius:16px;margin:1rem}
+.login-title{font-size:1.5rem;font-weight:900;color:var(--primary);margin-bottom:.3rem;text-align:center}
+.login-sub{font-size:.82rem;color:var(--sub);text-align:center;margin-bottom:2rem}
+.form-group{margin-bottom:1.1rem}
+.form-label{font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sub);margin-bottom:.4rem;display:block}
+.form-input{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:10px;padding:.7rem 1rem;color:var(--text);font-size:.9rem;transition:border-color .2s}
+.form-input:focus{outline:none;border-color:var(--primary)}
+.form-select{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:10px;padding:.7rem 1rem;color:var(--text);font-size:.9rem;appearance:none;cursor:pointer}
+.form-select:focus{outline:none;border-color:var(--primary)}
+.form-textarea{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:10px;padding:.7rem 1rem;color:var(--text);font-size:.85rem;resize:vertical;min-height:80px}
+.form-textarea:focus{outline:none;border-color:var(--primary)}
+.btn-primary{width:100%;background:var(--primary);color:var(--primary-text);border:none;border-radius:10px;padding:.8rem;font-size:.9rem;font-weight:700;cursor:pointer;transition:opacity .2s}
+.btn-primary:hover{opacity:.88}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:.55rem 1rem;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-secondary:hover{border-color:var(--primary);color:var(--primary)}
+.btn-danger{background:var(--danger);color:#fff;border:none;border-radius:8px;padding:.45rem .85rem;font-size:.78rem;font-weight:700;cursor:pointer;opacity:.85}
+.btn-danger:hover{opacity:1}
+.error-msg{color:var(--sold);font-size:.8rem;margin-top:.75rem;text-align:center;min-height:1.2em}
+
+/* ── SHELL ── */
+#adminPage{flex-direction:row;overflow:hidden}
+
+/* Sidebar */
+.sidebar{
+  width:220px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding-top:calc(1rem + var(--safe-top));
+  overflow-y:auto
+}
+.sidebar-logo{padding:0 1.2rem 1.5rem;display:flex;align-items:center;gap:.75rem}
+.sidebar-logo img{max-height:32px;max-width:100px;object-fit:contain;filter:brightness(0) invert(1);display:none}
+.sidebar-logo-text{font-size:1rem;font-weight:900;color:var(--primary)}
+.sidebar-section{font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--sub2);padding:.5rem 1.2rem .3rem}
+.nav-item{
+  display:flex;align-items:center;gap:.75rem;padding:.7rem 1.2rem;
+  font-size:.85rem;font-weight:500;color:var(--sub);cursor:pointer;
+  border-left:3px solid transparent;transition:all .15s
+}
+.nav-item:hover{color:var(--text);background:var(--card)}
+.nav-item.active{color:var(--primary);border-left-color:var(--primary);background:rgba(212,168,67,.07)}
+.nav-item .ni-icon{font-size:1rem;width:20px;text-align:center}
+.sidebar-footer{margin-top:auto;padding:1.2rem;border-top:1px solid var(--border)}
+.user-info{font-size:.78rem;color:var(--sub);margin-bottom:.6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-role{display:inline-block;background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:.15rem .6rem;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--primary);margin-bottom:.6rem}
+.btn-signout{width:100%;background:none;border:1px solid var(--border);color:var(--sub);padding:.5rem;border-radius:8px;font-size:.78rem;cursor:pointer;transition:all .2s}
+.btn-signout:hover{border-color:var(--danger);color:var(--danger)}
+
+/* Main content */
+.admin-main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.section{display:none;flex:1;flex-direction:column}
+.section.active{display:flex}
+.section-head{
+  padding:1.5rem 2rem 1rem;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  background:var(--bg)
+}
+.section-title{font-size:1.2rem;font-weight:900}
+.section-body{padding:1.5rem 2rem;flex:1;overflow-y:auto}
+
+/* Mobile nav (bottom) */
+.mobile-nav{
+  display:none;flex-shrink:0;background:var(--panel);border-top:1px solid var(--border);
+  padding:0 1rem calc(.5rem + var(--safe-bottom))
+}
+.mobile-nav-items{display:flex}
+.mn-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:.6rem .25rem;font-size:.62rem;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--sub);cursor:pointer;transition:color .15s;gap:.2rem
+}
+.mn-item .mn-icon{font-size:1.2rem}
+.mn-item.active{color:var(--primary)}
+
+@media(max-width:768px){
+  .sidebar{display:none}
+  .mobile-nav{display:flex}
+  .section-head{padding:1.2rem 1rem .8rem}
+  .section-body{padding:1rem}
+}
+
+/* ── BEERS TABLE / CARDS ── */
+.beer-table{width:100%;border-collapse:collapse}
+.beer-table th{font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sub);padding:.5rem .75rem;text-align:left;border-bottom:2px solid var(--border);white-space:nowrap}
+.beer-table td{padding:.65rem .75rem;border-bottom:1px solid var(--border);font-size:.85rem;vertical-align:middle}
+.beer-table tr:hover td{background:var(--card)}
+.beer-table tr.soldout td{opacity:.5}
+.bt-brewery{font-size:.7rem;color:var(--sub);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.bt-name{font-weight:700}
+.bt-meta{font-size:.75rem;color:var(--sub);margin-top:.1rem}
+.stock-select{
+  background:var(--card2);border:1px solid var(--border);border-radius:8px;
+  padding:.35rem .6rem;font-size:.78rem;font-weight:700;color:var(--text);cursor:pointer;
+  appearance:none;-webkit-appearance:none;padding-right:1.5rem;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right .5rem center
+}
+.stock-select.live{color:var(--live)}
+.stock-select.low{color:var(--low)}
+.stock-select.soldout{color:var(--sold)}
+.btn-edit{background:none;border:1px solid var(--border);border-radius:7px;padding:.3rem .65rem;font-size:.75rem;color:var(--sub);cursor:pointer;transition:all .15s}
+.btn-edit:hover{border-color:var(--primary);color:var(--primary)}
+.vendor-tag{font-size:.65rem;background:var(--card2);border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;color:var(--sub)}
+
+/* Mobile beer cards (vendor view) */
+.beer-row-card{background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:.6rem}
+.brc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.75rem}
+.brc-info .brc-brewery{font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sub);margin-bottom:.15rem}
+.brc-info .brc-name{font-size:.95rem;font-weight:700}
+.brc-info .brc-meta{font-size:.75rem;color:var(--sub);margin-top:.1rem}
+.stock-select-large{
+  background:var(--card2);border:2px solid var(--border);border-radius:10px;
+  padding:.5rem .9rem;font-size:.85rem;font-weight:700;color:var(--text);cursor:pointer;
+  appearance:none;min-width:140px
+}
+.stock-select-large.live{color:var(--live);border-color:rgba(76,175,80,.4)}
+.stock-select-large.low{color:var(--low);border-color:rgba(255,152,0,.4)}
+.stock-select-large.soldout{color:var(--sold);border-color:rgba(244,67,54,.3)}
+
+/* ── IMPORT ── */
+.import-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:1.5rem}
+.imp-tab{padding:.6rem 1.25rem;font-size:.82rem;font-weight:700;color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+.imp-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.import-pane{display:none}
+.import-pane.active{display:block}
+.drop-zone{
+  border:2px dashed var(--border);border-radius:12px;padding:3rem 2rem;
+  text-align:center;cursor:pointer;transition:all .2s
+}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--primary);background:rgba(212,168,67,.05)}
+.drop-icon{font-size:2.5rem;margin-bottom:.75rem}
+.drop-title{font-size:.95rem;font-weight:700;margin-bottom:.35rem}
+.drop-sub{font-size:.8rem;color:var(--sub)}
+.drop-sub a{color:var(--primary);cursor:pointer;text-decoration:underline}
+#csvFileInput,#imageFileInput{display:none}
+.preview-table-wrap{overflow-x:auto;margin-top:1.5rem;border:1px solid var(--border);border-radius:10px}
+.preview-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.preview-table th{background:var(--card2);padding:.5rem .75rem;text-align:left;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--sub);border-bottom:1px solid var(--border)}
+.preview-table td{padding:.5rem .75rem;border-bottom:1px solid var(--border)}
+.preview-table tr:last-child td{border-bottom:none}
+.import-actions{display:flex;gap:.75rem;margin-top:1.25rem;align-items:center;flex-wrap:wrap}
+.info-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;font-size:.82rem;color:var(--sub);line-height:1.65}
+.info-box strong{color:var(--text)}
+.api-key-row{display:flex;gap:.6rem;align-items:flex-end;margin-bottom:1rem}
+.api-key-row .form-group{flex:1;margin-bottom:0}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--sub);display:inline-block;margin-right:.4rem}
+.status-dot.processing{background:var(--low);animation:pulse .8s infinite}
+.status-dot.done{background:var(--live)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── SETTINGS ── */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:640px){.settings-grid{grid-template-columns:1fr}}
+.settings-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem}
+.settings-card-title{font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--sub);margin-bottom:1.1rem}
+.color-row{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem}
+.color-row label{flex:1;font-size:.82rem;color:var(--sub)}
+.color-input-wrap{display:flex;align-items:center;gap:.5rem}
+.color-swatch{width:36px;height:36px;border-radius:8px;border:2px solid var(--border);cursor:pointer;flex-shrink:0}
+.color-hex{width:90px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:.4rem .6rem;color:var(--text);font-size:.82rem;font-family:monospace}
+.logo-upload-area{border:2px dashed var(--border);border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;transition:all .2s}
+.logo-upload-area:hover{border-color:var(--primary)}
+.logo-preview{max-height:60px;max-width:160px;object-fit:contain;margin:0 auto .75rem;display:block;filter:brightness(0) invert(1)}
+.preview-festival{border-radius:10px;overflow:hidden;border:1px solid var(--border);margin-top:1.5rem}
+.preview-header{padding:1rem 1.25rem;display:flex;align-items:center;gap:.75rem}
+.preview-beer{display:flex;align-items:center;gap:.75rem;padding:.75rem 1.25rem;border-top:1px solid var(--border)}
+.preview-dot{width:10px;height:10px;border-radius:50%}
+
+/* ── USERS ── */
+.user-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.25rem;margin-bottom:.6rem;display:flex;align-items:center;gap:1rem}
+.user-avatar{width:40px;height:40px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;font-weight:700;color:var(--primary)}
+.user-details{flex:1;min-width:0}
+.user-name{font-weight:700;font-size:.9rem}
+.user-email{font-size:.75rem;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-brewery{font-size:.72rem;color:var(--primary);font-weight:600;margin-top:.15rem}
+.role-badge{font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.15rem .5rem;border-radius:5px;flex-shrink:0}
+.role-admin{background:rgba(212,168,67,.15);color:var(--primary);border:1px solid rgba(212,168,67,.3)}
+.role-vendor{background:rgba(76,175,80,.12);color:#4caf50;border:1px solid rgba(76,175,80,.3)}
+.role-pending{background:rgba(136,136,136,.1);color:var(--sub);border:1px solid var(--border)}
+
+/* ── MODAL ── */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:16px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1.5rem;border-bottom:1px solid var(--border)}
+.modal-title{font-size:1rem;font-weight:800}
+.modal-close{background:none;border:none;color:var(--sub);font-size:1.3rem;cursor:pointer;padding:.25rem;line-height:1}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:1.5rem}
+.modal-footer{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:.75rem}
+.tag-checkboxes{display:flex;gap:.5rem;flex-wrap:wrap}
+.tag-cb{display:flex;align-items:center;gap:.35rem;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:.4rem .7rem;cursor:pointer;font-size:.78rem;transition:all .15s}
+.tag-cb input{display:none}
+.tag-cb.checked{background:rgba(212,168,67,.15);border-color:var(--primary);color:var(--primary)}
+
+/* ── MISC ── */
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-row{display:flex;align-items:center;justify-content:center;padding:3rem;gap:.75rem;color:var(--sub);font-size:.85rem}
+.count-chip{background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:.2rem .7rem;font-size:.72rem;color:var(--sub);margin-left:.5rem}
+.empty-state{text-align:center;padding:3rem 2rem;color:var(--sub)}
+.empty-state-icon{font-size:2.5rem;margin-bottom:.75rem}
+.empty-state-title{font-size:1rem;font-weight:700;color:var(--text);margin-bottom:.35rem}
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(8px);background:var(--card2);border:1px solid var(--border);padding:.55rem 1.2rem;border-radius:30px;font-size:.8rem;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;z-index:300}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LOGIN PAGE
+════════════════════════════════════════════════════════════ -->
+<div id="loginPage" class="page active">
+  <div class="login-box">
+    <div class="login-title">🍺 Festival Admin</div>
+    <div class="login-sub">Sign in to manage your event</div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input class="form-input" id="loginEmail" type="email" placeholder="admin@festival.com" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="loginBtn" onclick="doLogin()">Sign In</button>
+    <div class="error-msg" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADMIN SHELL
+════════════════════════════════════════════════════════════ -->
+<div id="adminPage" class="page">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <img id="sidebarLogo" src="" alt="">
+      <div class="sidebar-logo-text" id="sidebarName">Festival Admin</div>
+    </div>
+    <div class="sidebar-section">Manage</div>
+    <div class="nav-item active" data-section="beers" onclick="showSection('beers',this)">
+      <span class="ni-icon">🍺</span><span id="navBeersLabel">Beers</span>
+    </div>
+    <div class="nav-item admin-only" data-section="import" onclick="showSection('import',this)">
+      <span class="ni-icon">📥</span>Import Beers
+    </div>
+    <div class="sidebar-section admin-only">Festival</div>
+    <div class="nav-item admin-only" data-section="users" onclick="showSection('users',this)">
+      <span class="ni-icon">👥</span>Vendors
+    </div>
+    <div class="nav-item admin-only" data-section="settings" onclick="showSection('settings',this)">
+      <span class="ni-icon">⚙️</span>Settings
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-role" id="sidebarRole">admin</div>
+      <div class="user-info" id="sidebarEmail">—</div>
+      <button class="btn-signout" onclick="doSignOut()">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="admin-main">
+
+    <!-- ── BEERS SECTION ── -->
+    <div class="section active" id="secBeers">
+      <div class="section-head">
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <div class="section-title">Beers</div>
+          <span class="count-chip" id="beerCountChip">0</span>
+        </div>
+        <div style="display:flex;gap:.6rem">
+          <input class="form-input" id="beerSearch" placeholder="Search…" style="width:180px;padding:.45rem .85rem;font-size:.82rem" oninput="renderBeers()">
+          <button class="btn-secondary admin-only" onclick="openAddBeerModal()">+ Add Beer</button>
+        </div>
+      </div>
+      <div class="section-body" style="padding-top:1rem">
+        <div id="beersContent"><div class="loading-row"><div class="spinner"></div> Loading beers…</div></div>
+      </div>
+    </div>
+
+    <!-- ── IMPORT SECTION ── -->
+    <div class="section" id="secImport">
+      <div class="section-head">
+        <div class="section-title">Import Beers</div>
+      </div>
+      <div class="section-body">
+        <div class="import-tabs">
+          <div class="imp-tab active" onclick="switchImportTab('csv',this)">CSV Upload</div>
+          <div class="imp-tab" onclick="switchImportTab('image',this)">Image / PDF</div>
+          <div class="imp-tab" onclick="switchImportTab('manual',this)">Paste Text</div>
+        </div>
+
+        <!-- CSV -->
+        <div class="import-pane active" id="impCsv">
+          <div class="info-box">
+            <strong>CSV format:</strong> brewery, name, style, abv, description, tags, vendor_email<br>
+            Tags can be: <code>gf</code> (gluten free), <code>vegan</code>, <code>lo</code> (low ABV)<br>
+            <strong>Example row:</strong> Duration, Coastal Highway, West Coast IPA, 7.0, Bright and citrusy, gf,vendor@duration.com
+          </div>
+          <div class="drop-zone" id="csvDrop" onclick="document.getElementById('csvFileInput').click()">
+            <div class="drop-icon">📄</div>
+            <div class="drop-title">Drop your CSV here or click to browse</div>
+            <div class="drop-sub">Supports .csv and .txt files</div>
+          </div>
+          <input type="file" id="csvFileInput" accept=".csv,.txt" onchange="handleCsvFile(this.files[0])">
+          <div id="csvPreview"></div>
+        </div>
+
+        <!-- IMAGE -->
+        <div class="import-pane" id="impImage">
+          <div class="info-box">
+            Upload a photo or scan of your beer list (menu board, printed programme, etc.) and AI will extract all the beers automatically. Requires a Claude API key.
+          </div>
+          <div class="api-key-row">
+            <div class="form-group">
+              <label class="form-label">Claude API Key (Anthropic)</label>
+              <input class="form-input" id="claudeApiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
+            </div>
+            <button class="btn-secondary" onclick="saveApiKey()">Save</button>
+          </div>
+          <div class="drop-zone" id="imgDrop" onclick="document.getElementById('imageFileInput').click()">
+            <div class="drop-icon">🖼️</div>
+            <div class="drop-title">Drop your image here or click to browse</div>
+            <div class="drop-sub">JPG, PNG, WEBP accepted</div>
+          </div>
+          <input type="file" id="imageFileInput" accept="image/jpeg,image/png,image/webp" onchange="handleImageFile(this.files[0])">
+          <div id="imageStatus" style="display:none;margin-top:1rem;align-items:center;gap:.75rem;font-size:.85rem;color:var(--sub)">
+            <div class="spinner"></div> <span id="imageStatusText">Processing image…</span>
+          </div>
+          <div id="imagePreview"></div>
+        </div>
+
+        <!-- PASTE TEXT -->
+        <div class="import-pane" id="impManual">
+          <div class="info-box">
+            Paste text from your beer list — each beer on a new line. Works well with copy-paste from a PDF viewer or phone camera text recognition. Format: <strong>Brewery – Beer Name – Style – ABV%</strong> (or just paste freely, the parser will do its best).
+          </div>
+          <div class="form-group">
+            <label class="form-label">Paste beer list text</label>
+            <textarea class="form-textarea" id="pasteText" rows="10" placeholder="Duration – Coastal Highway – West Coast IPA – 7.0%&#10;Burnt Mill – Rivers Edge – Hazy Pale – 4.4%&#10;…"></textarea>
+          </div>
+          <button class="btn-secondary" onclick="parsePasteText()">Parse List</button>
+          <div id="pastePreview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── USERS SECTION ── -->
+    <div class="section" id="secUsers">
+      <div class="section-head">
+        <div class="section-title">Vendors</div>
+        <button class="btn-secondary" onclick="openAddUserModal()">+ Add Vendor</button>
+      </div>
+      <div class="section-body">
+        <div class="info-box" style="margin-bottom:1.25rem">
+          Vendors can only update stock status for beers assigned to their brewery. To add a new vendor: create their account here, then assign their beers in the Beers section.
+        </div>
+        <div id="usersContent"><div class="loading-row"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS SECTION ── -->
+    <div class="section" id="secSettings">
+      <div class="section-head">
+        <div class="section-title">Festival Settings</div>
+        <button class="btn-primary" style="width:auto;padding:.55rem 1.5rem" onclick="saveSettings()">Save Changes</button>
+      </div>
+      <div class="section-body">
+        <div class="settings-grid">
+
+          <!-- Identity -->
+          <div class="settings-card">
+            <div class="settings-card-title">Identity</div>
+            <div class="form-group">
+              <label class="form-label">Festival Name</label>
+              <input class="form-input" id="settingName" placeholder="Norwich Craft Beer Festival">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tagline</label>
+              <input class="form-input" id="settingTagline" placeholder="Drink better. Discover more.">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Logo</label>
+              <div class="logo-upload-area" onclick="document.getElementById('logoFileInput').click()">
+                <img id="logoPreview" class="logo-preview" src="" alt="" style="display:none">
+                <div id="logoUploadText" style="font-size:.82rem;color:var(--sub)">Click to upload logo<br><span style="font-size:.72rem">PNG, SVG recommended</span></div>
+              </div>
+              <input type="file" id="logoFileInput" accept="image/*" style="display:none" onchange="handleLogoUpload(this.files[0])">
+              <input type="hidden" id="settingLogoUrl">
+            </div>
+          </div>
+
+          <!-- Colours -->
+          <div class="settings-card">
+            <div class="settings-card-title">Colour Scheme</div>
+            <div class="color-row">
+              <label>Primary / Accent</label>
+              <div class="color-input-wrap">
+                <input type="color" class="color-swatch" id="cpPrimary" value="#d4a843" oninput="syncColor('primary',this.value);updatePreview()">
+                <input type="text" class="color-hex" id="chPrimary" value="#d4a843" oninput="syncColorFromHex('primary',this.value)">
+              </div>
+            </div>
+            <div class="color-row">
+              <label>Primary Button Text</label>
+              <div class="color-input-wrap">
+                <input type="color" class="color-swatch" id="cpPrimaryText" value="#000000" oninput="syncColor('primaryText',this.value);updatePreview()">
+                <input type="text" class="color-hex" id="chPrimaryText" value="#000000" oninput="syncColorFromHex('primaryText',this.value)">
+              </div>
+            </div>
+            <div class="color-row">
+              <label>Background</label>
+              <div class="color-input-wrap">
+                <input type="color" class="color-swatch" id="cpBg" value="#111111" oninput="syncColor('bg',this.value);updatePreview()">
+                <input type="text" class="color-hex" id="chBg" value="#111111" oninput="syncColorFromHex('bg',this.value)">
+              </div>
+            </div>
+            <div class="color-row">
+              <label>Card Surface</label>
+              <div class="color-input-wrap">
+                <input type="color" class="color-swatch" id="cpSurface" value="#1e1e1e" oninput="syncColor('surface',this.value);updatePreview()">
+                <input type="text" class="color-hex" id="chSurface" value="#1e1e1e" oninput="syncColorFromHex('surface',this.value)">
+              </div>
+            </div>
+            <div class="color-row">
+              <label>Text</label>
+              <div class="color-input-wrap">
+                <input type="color" class="color-swatch" id="cpText" value="#ffffff" oninput="syncColor('text',this.value);updatePreview()">
+                <input type="text" class="color-hex" id="chText" value="#ffffff" oninput="syncColorFromHex('text',this.value)">
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Live preview -->
+        <div style="margin-top:1.5rem">
+          <div style="font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--sub);margin-bottom:.75rem">Live Preview</div>
+          <div class="preview-festival" id="livePreview">
+            <div class="preview-header" id="pvHeader">
+              <span id="pvName" style="font-weight:900;font-size:1rem">Festival Name</span>
+            </div>
+            <div class="preview-beer" id="pvBeer">
+              <div style="flex:1">
+                <div style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.15rem" id="pvBrewery">Duration Brewing</div>
+                <div style="font-size:.9rem;font-weight:700;margin-bottom:.15rem">Coastal Highway</div>
+                <div style="font-size:.75rem" id="pvMeta">West Coast IPA · 7.0%</div>
+              </div>
+              <div id="pvDot" style="width:10px;height:10px;border-radius:50%;background:#4caf50;flex-shrink:0"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /admin-main -->
+
+  <!-- MOBILE BOTTOM NAV -->
+  <div class="mobile-nav">
+    <div class="mobile-nav-items">
+      <div class="mn-item active" data-section="beers" onclick="showSection('beers',this)">
+        <span class="mn-icon">🍺</span><span>Beers</span>
+      </div>
+      <div class="mn-item admin-only" data-section="import" onclick="showSection('import',this)">
+        <span class="mn-icon">📥</span><span>Import</span>
+      </div>
+      <div class="mn-item admin-only" data-section="users" onclick="showSection('users',this)">
+        <span class="mn-icon">👥</span><span>Vendors</span>
+      </div>
+      <div class="mn-item admin-only" data-section="settings" onclick="showSection('settings',this)">
+        <span class="mn-icon">⚙️</span><span>Settings</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /adminPage -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     BEER EDIT MODAL
+════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="beerModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="beerModalTitle">Edit Beer</div>
+      <button class="modal-close" onclick="closeModal('beerModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="beerModalId">
+      <div class="form-group"><label class="form-label">Brewery *</label><input class="form-input" id="bmBrewery" placeholder="e.g. Duration Brewing"></div>
+      <div class="form-group"><label class="form-label">Beer Name *</label><input class="form-input" id="bmName" placeholder="e.g. Coastal Highway"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group"><label class="form-label">Style</label><input class="form-input" id="bmStyle" placeholder="West Coast IPA"></div>
+        <div class="form-group"><label class="form-label">ABV %</label><input class="form-input" id="bmAbv" type="number" step="0.1" min="0" max="25" placeholder="7.0"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="bmDesc" placeholder="Tasting notes…"></textarea></div>
+      <div class="form-group">
+        <label class="form-label">Tags</label>
+        <div class="tag-checkboxes">
+          <label class="tag-cb" id="tcGf"><input type="checkbox" value="gf"> Gluten Free</label>
+          <label class="tag-cb" id="tcVegan"><input type="checkbox" value="vegan"> Vegan</label>
+          <label class="tag-cb" id="tcLo"><input type="checkbox" value="lo"> Low ABV</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Stock Status</label>
+        <select class="form-select" id="bmStock">
+          <option value="live">🟢 Available</option>
+          <option value="low">🟡 Low Stock</option>
+          <option value="soldout">🔴 Sold Out</option>
+        </select>
+      </div>
+      <div class="form-group admin-only">
+        <label class="form-label">Assigned Vendor</label>
+        <select class="form-select" id="bmVendor">
+          <option value="">— Unassigned —</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger admin-only" id="beerDeleteBtn" onclick="deleteBeer()" style="margin-right:auto">Delete</button>
+      <button class="btn-secondary" onclick="closeModal('beerModal')">Cancel</button>
+      <button class="btn-primary" style="width:auto;padding:.6rem 1.5rem" onclick="saveBeer()">Save Beer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ADD USER MODAL
+════════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="userModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="userModalTitle">Add Vendor</div>
+      <button class="modal-close" onclick="closeModal('userModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="userModalUid">
+      <div class="info-box" id="userModalInfo" style="margin-bottom:1rem">Enter the vendor's details. They'll receive login credentials to manage their brewery's stock.</div>
+      <div class="form-group"><label class="form-label">Display Name</label><input class="form-input" id="umName" placeholder="e.g. Duration Brewing"></div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="umEmail" type="email" placeholder="vendor@brewery.com"></div>
+      <div class="form-group" id="umPasswordGroup"><label class="form-label">Temporary Password</label><input class="form-input" id="umPassword" type="text" placeholder="They can change this after first login"></div>
+      <div class="form-group">
+        <label class="form-label">Assigned Brewery</label>
+        <input class="form-input" id="umBrewery" placeholder="Brewery name (must match beers exactly)">
+      </div>
+      <div class="error-msg" id="userError"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger" id="userDeleteBtn" onclick="deleteVendor()" style="display:none;margin-right:auto">Remove Vendor</button>
+      <button class="btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+      <button class="btn-primary" style="width:auto;padding:.6rem 1.5rem" id="saveUserBtn" onclick="saveVendor()">Add Vendor</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── FIREBASE INIT ──
+firebase.initializeApp(FIREBASE_CONFIG);
+const db  = firebase.firestore();
+const auth = firebase.auth();
+
+// ── STATE ──
+let currentUser = null;
+let currentRole = null;
+let currentBrewery = null;
+let allBeers = [];
+let allUsers = [];
+let allVendors = [];
+let beersUnsubscribe = null;
+let editingBeerId = null;
+let importPreviewData = [];
+
+// ── AUTH ──
+auth.onAuthStateChanged(async user => {
+  if (!user) { showPage('loginPage'); return; }
+  currentUser = user;
+  try {
+    const snap = await db.collection('users').doc(user.uid).get();
+    if (!snap.exists) {
+      // Auto-create user doc as pending
+      await db.collection('users').doc(user.uid).set({ email: user.email, role: 'pending', displayName: user.displayName || user.email.split('@')[0] });
+      auth.signOut(); showPage('loginPage');
+      document.getElementById('loginError').textContent = 'Account pending setup by admin. Please try again shortly.';
+      return;
+    }
+    const userData = snap.data();
+    currentRole = userData.role;
+    currentBrewery = userData.brewery || null;
+    if (currentRole === 'pending') {
+      auth.signOut(); showPage('loginPage');
+      document.getElementById('loginError').textContent = 'Account pending setup by admin.';
+      return;
+    }
+    initAdmin(user, userData);
+  } catch(e) { auth.signOut(); showPage('loginPage'); }
+});
+
+async function doLogin() {
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginError');
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPassword').value;
+  if (!email || !pass) { err.textContent = 'Please enter email and password'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in…'; err.textContent = '';
+  try { await auth.signInWithEmailAndPassword(email, pass); }
+  catch(e) {
+    err.textContent = e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found'
+      ? 'Incorrect email or password' : 'Sign in failed. Please try again.';
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+document.getElementById('loginEmail').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginPassword').focus(); });
+document.getElementById('loginPassword').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+function doSignOut() { auth.signOut(); }
+
+// ── INIT ADMIN ──
+function initAdmin(user, userData) {
+  showPage('adminPage');
+  document.getElementById('sidebarEmail').textContent = user.email;
+  document.getElementById('sidebarRole').textContent = currentRole;
+  if (currentRole !== 'admin') {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    document.getElementById('navBeersLabel').textContent = 'My Beers';
+  }
+  loadSettings();
+  startBeersListener();
+  if (currentRole === 'admin') loadUsers();
+}
+
+// ── SETTINGS ──
+function loadSettings() {
+  db.collection('settings').doc('main').get().then(snap => {
+    if (!snap.exists) return;
+    const s = snap.data();
+    document.getElementById('settingName').value    = s.festivalName || '';
+    document.getElementById('settingTagline').value = s.tagline || '';
+    document.getElementById('settingLogoUrl').value = s.logoUrl || '';
+    if (s.logoUrl) {
+      document.getElementById('logoPreview').src = s.logoUrl;
+      document.getElementById('logoPreview').style.display = 'block';
+      document.getElementById('logoUploadText').style.display = 'none';
+      document.getElementById('sidebarLogo').src = s.logoUrl;
+      document.getElementById('sidebarLogo').style.display = 'block';
+      document.getElementById('sidebarName').style.display = 'none';
+    }
+    document.getElementById('sidebarName').textContent = s.festivalName || 'Festival Admin';
+    const colors = { primary:s.primaryColor||'#d4a843', primaryText:s.primaryText||'#000000', bg:s.bgColor||'#111111', surface:s.surfaceColor||'#1e1e1e', text:s.textColor||'#ffffff' };
+    Object.entries(colors).forEach(([k,v]) => {
+      const cp = document.getElementById('cp'+k.charAt(0).toUpperCase()+k.slice(1));
+      const ch = document.getElementById('ch'+k.charAt(0).toUpperCase()+k.slice(1));
+      if (cp) cp.value = v;
+      if (ch) ch.value = v;
+    });
+    if (s.claudeApiKey) document.getElementById('claudeApiKey').value = s.claudeApiKey;
+    updatePreview();
+  });
+}
+
+async function saveSettings() {
+  const data = {
+    festivalName:  document.getElementById('settingName').value.trim(),
+    tagline:       document.getElementById('settingTagline').value.trim(),
+    logoUrl:       document.getElementById('settingLogoUrl').value,
+    primaryColor:  document.getElementById('chPrimary').value,
+    primaryText:   document.getElementById('chPrimaryText').value,
+    bgColor:       document.getElementById('chBg').value,
+    surfaceColor:  document.getElementById('chSurface').value,
+    textColor:     document.getElementById('chText').value,
+    updatedAt:     firebase.firestore.FieldValue.serverTimestamp()
+  };
+  const apiKey = document.getElementById('claudeApiKey').value.trim();
+  if (apiKey) data.claudeApiKey = apiKey;
+  try {
+    await db.collection('settings').doc('main').set(data, { merge: true });
+    showToast('Settings saved ✓');
+    document.getElementById('sidebarName').textContent = data.festivalName || 'Festival Admin';
+  } catch(e) { showToast('Error saving settings'); }
+}
+
+async function saveApiKey() {
+  const key = document.getElementById('claudeApiKey').value.trim();
+  if (!key) return;
+  await db.collection('settings').doc('main').set({ claudeApiKey: key }, { merge: true });
+  showToast('API key saved ✓');
+}
+
+// ── COLORS ──
+function syncColor(key, val) {
+  const capKey = key.charAt(0).toUpperCase() + key.slice(1);
+  document.getElementById('ch' + capKey).value = val;
+}
+function syncColorFromHex(key, val) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(val)) return;
+  const capKey = key.charAt(0).toUpperCase() + key.slice(1);
+  document.getElementById('cp' + capKey).value = val;
+  updatePreview();
+}
+function updatePreview() {
+  const bg   = document.getElementById('chBg').value   || '#111111';
+  const surf = document.getElementById('chSurface').value || '#1e1e1e';
+  const prim = document.getElementById('chPrimary').value || '#d4a843';
+  const txt  = document.getElementById('chText').value || '#ffffff';
+  const pvH = document.getElementById('pvHeader');
+  const pvB = document.getElementById('pvBeer');
+  if (pvH) { pvH.style.background = bg; pvH.style.borderBottom = `1px solid #2c2c2c`; }
+  if (pvB) { pvB.style.background = surf; }
+  document.getElementById('pvName').style.color = prim;
+  document.getElementById('pvBrewery').style.color = '#888';
+  document.getElementById('pvMeta').style.color = '#888';
+  document.querySelectorAll('#pvBeer [style]').forEach(el => el.style.color = txt);
+}
+
+// ── LOGO UPLOAD ──
+function handleLogoUpload(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const url = e.target.result;
+    document.getElementById('settingLogoUrl').value = url;
+    document.getElementById('logoPreview').src = url;
+    document.getElementById('logoPreview').style.display = 'block';
+    document.getElementById('logoUploadText').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── BEERS ──
+function startBeersListener() {
+  if (beersUnsubscribe) beersUnsubscribe();
+  let query = db.collection('beers').orderBy('brewery');
+  if (currentRole === 'vendor') query = query.where('vendorUid', '==', currentUser.uid);
+  beersUnsubscribe = query.onSnapshot(snap => {
+    allBeers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    document.getElementById('beerCountChip').textContent = allBeers.length;
+    renderBeers();
+  });
+}
+
+function renderBeers() {
+  const q = (document.getElementById('beerSearch')?.value || '').toLowerCase();
+  const beers = q ? allBeers.filter(b => b.name?.toLowerCase().includes(q) || b.brewery?.toLowerCase().includes(q)) : allBeers;
+  const wrap = document.getElementById('beersContent');
+  if (!beers.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🍺</div><div class="empty-state-title">${allBeers.length ? 'No results' : 'No beers yet'}</div><p style="color:var(--sub);font-size:.83rem">${allBeers.length ? 'Try a different search' : 'Import beers using the Import tab'}</p></div>`;
+    return;
+  }
+  if (currentRole === 'vendor') {
+    wrap.innerHTML = beers.map(b => vendorBeerCard(b)).join('');
+    return;
+  }
+  let html = `<div style="overflow-x:auto"><table class="beer-table"><thead><tr><th>Beer</th><th>Style / ABV</th><th>Stock</th><th>Vendor</th><th></th></tr></thead><tbody>`;
+  beers.forEach(b => {
+    const vendor = allVendors.find(u => u.id === b.vendorUid);
+    html += `<tr class="${b.stockStatus==='soldout'?'soldout':''}">
+      <td><div class="bt-brewery">${b.brewery}</div><div class="bt-name">${b.name}</div></td>
+      <td><div class="bt-meta">${b.style||'—'} ${b.abv ? `· ${b.abv}%` : ''}</div></td>
+      <td><select class="stock-select ${b.stockStatus||'live'}" data-id="${b.id}" onchange="updateStock(this)">
+        <option value="live" ${b.stockStatus==='live'?'selected':''}>🟢 Available</option>
+        <option value="low" ${b.stockStatus==='low'?'selected':''}>🟡 Low Stock</option>
+        <option value="soldout" ${b.stockStatus==='soldout'?'selected':''}>🔴 Sold Out</option>
+      </select></td>
+      <td>${vendor ? `<span class="vendor-tag">${vendor.brewery||vendor.displayName}</span>` : '<span style="color:var(--sub2);font-size:.78rem">—</span>'}</td>
+      <td><button class="btn-edit" onclick="openEditBeerModal('${b.id}')">Edit</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+function vendorBeerCard(b) {
+  return `<div class="beer-row-card">
+    <div class="brc-top">
+      <div class="brc-info">
+        <div class="brc-brewery">${b.brewery}</div>
+        <div class="brc-name">${b.name}</div>
+        <div class="brc-meta">${b.style||''}${b.abv ? ` · ${b.abv}%` : ''}</div>
+      </div>
+      <select class="stock-select-large ${b.stockStatus||'live'}" data-id="${b.id}" onchange="updateStock(this)">
+        <option value="live" ${b.stockStatus==='live'?'selected':''}>🟢 Available</option>
+        <option value="low" ${b.stockStatus==='low'?'selected':''}>🟡 Low Stock</option>
+        <option value="soldout" ${b.stockStatus==='soldout'?'selected':''}>🔴 Sold Out</option>
+      </select>
+    </div>
+  </div>`;
+}
+
+async function updateStock(select) {
+  const id  = select.dataset.id;
+  const val = select.value;
+  select.className = `stock-select ${val}`;
+  try {
+    await db.collection('beers').doc(id).update({ stockStatus: val });
+  } catch(e) { showToast('Failed to update stock'); }
+}
+
+// ── BEER MODAL ──
+function openAddBeerModal() {
+  editingBeerId = null;
+  document.getElementById('beerModalTitle').textContent = 'Add Beer';
+  document.getElementById('beerModalId').value = '';
+  document.getElementById('bmBrewery').value = '';
+  document.getElementById('bmName').value = '';
+  document.getElementById('bmStyle').value = '';
+  document.getElementById('bmAbv').value = '';
+  document.getElementById('bmDesc').value = '';
+  document.getElementById('bmStock').value = 'live';
+  document.getElementById('beerDeleteBtn').style.display = 'none';
+  ['tcGf','tcVegan','tcLo'].forEach(id => { const el=document.getElementById(id); el.classList.remove('checked'); el.querySelector('input').checked = false; });
+  populateVendorDropdown('');
+  openModal('beerModal');
+}
+
+function openEditBeerModal(id) {
+  const b = allBeers.find(x => x.id === id);
+  if (!b) return;
+  editingBeerId = id;
+  document.getElementById('beerModalTitle').textContent = 'Edit Beer';
+  document.getElementById('beerModalId').value = id;
+  document.getElementById('bmBrewery').value = b.brewery || '';
+  document.getElementById('bmName').value    = b.name    || '';
+  document.getElementById('bmStyle').value   = b.style   || '';
+  document.getElementById('bmAbv').value     = b.abv     || '';
+  document.getElementById('bmDesc').value    = b.description || '';
+  document.getElementById('bmStock').value   = b.stockStatus || 'live';
+  document.getElementById('beerDeleteBtn').style.display = 'block';
+  const tags = b.tags || [];
+  const map = { gf:'tcGf', vegan:'tcVegan', lo:'tcLo' };
+  Object.entries(map).forEach(([tag,elId]) => {
+    const el = document.getElementById(elId);
+    const checked = tags.includes(tag);
+    el.classList.toggle('checked', checked);
+    el.querySelector('input').checked = checked;
+  });
+  populateVendorDropdown(b.vendorUid || '');
+  openModal('beerModal');
+}
+
+function populateVendorDropdown(selectedUid) {
+  const sel = document.getElementById('bmVendor');
+  sel.innerHTML = '<option value="">— Unassigned —</option>';
+  allVendors.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.id; opt.textContent = `${v.displayName || v.email} (${v.brewery || '—'})`;
+    if (v.id === selectedUid) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+document.querySelectorAll('.tag-cb').forEach(el => {
+  el.addEventListener('click', () => {
+    el.classList.toggle('checked');
+    el.querySelector('input').checked = el.classList.contains('checked');
+  });
+});
+
+async function saveBeer() {
+  const brewery = document.getElementById('bmBrewery').value.trim();
+  const name    = document.getElementById('bmName').value.trim();
+  if (!brewery || !name) { showToast('Brewery and name are required'); return; }
+  const tags = ['gf','vegan','lo'].filter(t => document.getElementById({gf:'tcGf',vegan:'tcVegan',lo:'tcLo'}[t]).querySelector('input').checked);
+  const data = {
+    brewery, name,
+    style:       document.getElementById('bmStyle').value.trim() || '',
+    abv:         parseFloat(document.getElementById('bmAbv').value) || null,
+    description: document.getElementById('bmDesc').value.trim() || '',
+    stockStatus: document.getElementById('bmStock').value,
+    vendorUid:   document.getElementById('bmVendor').value || null,
+    tags,
+    updatedAt:   firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try {
+    if (editingBeerId) {
+      await db.collection('beers').doc(editingBeerId).update(data);
+      showToast('Beer updated ✓');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('beers').add(data);
+      showToast('Beer added ✓');
+    }
+    closeModal('beerModal');
+  } catch(e) { showToast('Error saving beer'); }
+}
+
+async function deleteBeer() {
+  if (!editingBeerId) return;
+  if (!confirm('Delete this beer? This cannot be undone.')) return;
+  try {
+    await db.collection('beers').doc(editingBeerId).delete();
+    showToast('Beer deleted');
+    closeModal('beerModal');
+  } catch(e) { showToast('Error deleting beer'); }
+}
+
+// ── USERS ──
+async function loadUsers() {
+  const snap = await db.collection('users').get();
+  allUsers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  allVendors = allUsers.filter(u => u.role === 'vendor');
+  renderUsers();
+}
+
+function renderUsers() {
+  const vendors = allUsers.filter(u => u.role !== 'admin');
+  const wrap = document.getElementById('usersContent');
+  if (!vendors.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">👥</div><div class="empty-state-title">No vendors yet</div><p style="color:var(--sub);font-size:.83rem">Add vendor accounts for each brewery</p></div>`;
+    return;
+  }
+  wrap.innerHTML = vendors.map(u => `
+    <div class="user-card">
+      <div class="user-avatar">${(u.displayName||u.email||'?')[0].toUpperCase()}</div>
+      <div class="user-details">
+        <div class="user-name">${u.displayName || '—'}</div>
+        <div class="user-email">${u.email || '—'}</div>
+        ${u.brewery ? `<div class="user-brewery">🏭 ${u.brewery}</div>` : ''}
+      </div>
+      <span class="role-badge ${u.role === 'vendor' ? 'role-vendor' : 'role-pending'}">${u.role}</span>
+      <button class="btn-secondary" onclick="openEditUserModal('${u.id}')" style="flex-shrink:0">Edit</button>
+    </div>`).join('');
+}
+
+function openAddUserModal() {
+  document.getElementById('userModalTitle').textContent = 'Add Vendor';
+  document.getElementById('userModalUid').value = '';
+  document.getElementById('umName').value = '';
+  document.getElementById('umEmail').value = '';
+  document.getElementById('umPassword').value = '';
+  document.getElementById('umBrewery').value = '';
+  document.getElementById('userError').textContent = '';
+  document.getElementById('umPasswordGroup').style.display = '';
+  document.getElementById('userDeleteBtn').style.display = 'none';
+  document.getElementById('saveUserBtn').textContent = 'Add Vendor';
+  document.getElementById('userModalInfo').textContent = 'The vendor will use these credentials to log in and update their beers.';
+  openModal('userModal');
+}
+
+function openEditUserModal(uid) {
+  const user = allUsers.find(u => u.id === uid);
+  if (!user) return;
+  document.getElementById('userModalTitle').textContent = 'Edit Vendor';
+  document.getElementById('userModalUid').value = uid;
+  document.getElementById('umName').value    = user.displayName || '';
+  document.getElementById('umEmail').value   = user.email || '';
+  document.getElementById('umBrewery').value = user.brewery || '';
+  document.getElementById('umPasswordGroup').style.display = 'none';
+  document.getElementById('userError').textContent = '';
+  document.getElementById('userDeleteBtn').style.display = 'block';
+  document.getElementById('saveUserBtn').textContent = 'Save Changes';
+  document.getElementById('userModalInfo').textContent = 'Update this vendor\'s details and brewery assignment.';
+  openModal('userModal');
+}
+
+async function saveVendor() {
+  const uid      = document.getElementById('userModalUid').value;
+  const name     = document.getElementById('umName').value.trim();
+  const email    = document.getElementById('umEmail').value.trim();
+  const password = document.getElementById('umPassword').value;
+  const brewery  = document.getElementById('umBrewery').value.trim();
+  const errEl    = document.getElementById('userError');
+  errEl.textContent = '';
+  if (!name || !email) { errEl.textContent = 'Name and email are required'; return; }
+  const btn = document.getElementById('saveUserBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    if (uid) {
+      await db.collection('users').doc(uid).update({ displayName: name, email, brewery, role: 'vendor', updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      showToast('Vendor updated ✓');
+    } else {
+      if (!password) { errEl.textContent = 'Password is required'; btn.disabled=false; btn.textContent='Add Vendor'; return; }
+      const adminEmail    = auth.currentUser.email;
+      const adminPassword = prompt('Re-enter your admin password to create the vendor account:');
+      if (!adminPassword) { btn.disabled=false; btn.textContent='Add Vendor'; return; }
+      const newCred = await auth.createUserWithEmailAndPassword(email, password);
+      const newUid  = newCred.user.uid;
+      await db.collection('users').doc(newUid).set({ displayName: name, email, brewery, role: 'vendor', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      await auth.signInWithEmailAndPassword(adminEmail, adminPassword);
+      showToast('Vendor created ✓');
+    }
+    await loadUsers();
+    closeModal('userModal');
+  } catch(e) {
+    errEl.textContent = e.code === 'auth/email-already-in-use' ? 'That email already has an account' : (e.message || 'Error saving vendor');
+  }
+  btn.disabled = false; btn.textContent = uid ? 'Save Changes' : 'Add Vendor';
+}
+
+async function deleteVendor() {
+  const uid = document.getElementById('userModalUid').value;
+  if (!uid || !confirm('Remove this vendor? Their beers will remain but be unassigned.')) return;
+  try {
+    await db.collection('users').doc(uid).delete();
+    showToast('Vendor removed');
+    await loadUsers(); closeModal('userModal');
+  } catch(e) { showToast('Error removing vendor'); }
+}
+
+// ── CSV IMPORT ──
+function handleCsvFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => parseCsv(e.target.result);
+  reader.readAsText(file);
+}
+['dragover','dragleave','drop'].forEach(ev => {
+  document.getElementById('csvDrop').addEventListener(ev, e => {
+    e.preventDefault();
+    if (ev === 'dragover') e.target.closest('.drop-zone').classList.add('drag');
+    if (ev === 'dragleave') e.target.closest('.drop-zone')?.classList.remove('drag');
+    if (ev === 'drop') { e.target.closest('.drop-zone').classList.remove('drag'); handleCsvFile(e.dataTransfer.files[0]); }
+  });
+});
+
+function parseCsv(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) { showToast('CSV appears empty'); return; }
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z_]/g,''));
+  const colMap = {
+    brewery:     ['brewery','brewer','brewing'],
+    name:        ['name','beer','beer_name','beername'],
+    style:       ['style','type'],
+    abv:         ['abv','alcohol','strength'],
+    description: ['description','desc','notes','tasting'],
+    tags:        ['tags','tag'],
+    vendor_email:['vendor_email','vendoremail','vendor']
+  };
+  const colIdx = {};
+  Object.entries(colMap).forEach(([key, aliases]) => {
+    const idx = headers.findIndex(h => aliases.some(a => h.includes(a)));
+    if (idx >= 0) colIdx[key] = idx;
+  });
+  const beers = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = splitCsvLine(lines[i]);
+    if (cols.length < 2) continue;
+    const b = {
+      brewery:     (cols[colIdx.brewery]     || '').trim(),
+      name:        (cols[colIdx.name]         || '').trim(),
+      style:       (cols[colIdx.style]        || '').trim(),
+      abv:         parseFloat(cols[colIdx.abv]) || null,
+      description: (cols[colIdx.description]  || '').trim(),
+      tags:        parseTags(cols[colIdx.tags] || ''),
+      vendorEmail: (cols[colIdx.vendor_email] || '').trim(),
+    };
+    if (b.brewery && b.name) beers.push(b);
+  }
+  importPreviewData = beers;
+  showImportPreview(beers, 'csvPreview');
+}
+
+function splitCsvLine(line) {
+  const result = []; let cur = ''; let inQuote = false;
+  for (const ch of line) {
+    if (ch === '"') { inQuote = !inQuote; }
+    else if (ch === ',' && !inQuote) { result.push(cur); cur = ''; }
+    else { cur += ch; }
+  }
+  result.push(cur);
+  return result;
+}
+function parseTags(str) { return str.split(/[,;]/).map(t => t.trim().toLowerCase()).filter(t => ['gf','vegan','lo'].includes(t)); }
+
+// ── IMAGE IMPORT ──
+function handleImageFile(file) {
+  if (!file) return;
+  const apiKey = document.getElementById('claudeApiKey').value.trim();
+  if (!apiKey) { showToast('Please enter your Claude API key first'); return; }
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const b64 = e.target.result.split(',')[1];
+    const mediaType = file.type;
+    const statusEl = document.getElementById('imageStatus');
+    statusEl.style.display = 'flex';
+    document.getElementById('imageStatusText').textContent = 'Analysing beer list…';
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({
+          model: 'claude-opus-4-7',
+          max_tokens: 4096,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+              { type: 'text', text: 'Extract every beer from this festival beer list image. Return ONLY a valid JSON array, no other text. Each object must have: brewery (string), name (string), style (string), abv (number or null), description (string, empty if not given). Example: [{"brewery":"Duration","name":"Coastal Highway","style":"West Coast IPA","abv":7.0,"description":""}]' }
+            ]
+          }]
+        })
+      });
+      const json = await res.json();
+      const text = json.content?.[0]?.text || '';
+      const match = text.match(/\[[\s\S]*\]/);
+      if (!match) { showToast('Could not parse beer list from image'); statusEl.style.display='none'; return; }
+      const beers = JSON.parse(match[0]).filter(b => b.brewery && b.name);
+      importPreviewData = beers;
+      statusEl.style.display = 'none';
+      showImportPreview(beers, 'imagePreview');
+    } catch(e) { statusEl.style.display='none'; showToast('Image processing failed — check your API key'); }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── PASTE TEXT IMPORT ──
+function parsePasteText() {
+  const text = document.getElementById('pasteText').value.trim();
+  if (!text) return;
+  const lines = text.split('\n').filter(l => l.trim());
+  const beers = [];
+  const abvReg = /(\d+\.?\d*)%/;
+  lines.forEach(line => {
+    const parts = line.split(/[–—\-|,\t]/).map(p => p.trim()).filter(Boolean);
+    if (parts.length < 2) return;
+    const abvMatch = line.match(abvReg);
+    const abv = abvMatch ? parseFloat(abvMatch[1]) : null;
+    beers.push({
+      brewery:     parts[0] || '',
+      name:        parts[1] || '',
+      style:       parts[2] || '',
+      abv,
+      description: '',
+      tags:        []
+    });
+  });
+  importPreviewData = beers;
+  showImportPreview(beers, 'pastePreview');
+}
+
+// ── IMPORT PREVIEW ──
+function showImportPreview(beers, containerId) {
+  if (!beers.length) { document.getElementById(containerId).innerHTML = '<p style="color:var(--sub);font-size:.83rem;margin-top:1rem">No beers found.</p>'; return; }
+  let html = `<div class="preview-table-wrap"><table class="preview-table"><thead><tr><th>Brewery</th><th>Name</th><th>Style</th><th>ABV</th></tr></thead><tbody>`;
+  beers.slice(0,20).forEach(b => {
+    html += `<tr><td>${b.brewery}</td><td>${b.name}</td><td>${b.style||'—'}</td><td>${b.abv||'—'}</td></tr>`;
+  });
+  if (beers.length > 20) html += `<tr><td colspan="4" style="color:var(--sub);text-align:center;padding:.75rem">… and ${beers.length-20} more</td></tr>`;
+  html += '</tbody></table></div>';
+  html += `<div class="import-actions">
+    <button class="btn-primary" style="width:auto;padding:.6rem 1.5rem" onclick="confirmImport('${containerId}')">Import ${beers.length} Beer${beers.length!==1?'s':''}</button>
+    <button class="btn-secondary" onclick="document.getElementById('${containerId}').innerHTML='';importPreviewData=[]">Clear</button>
+    <span style="font-size:.8rem;color:var(--sub)">${beers.length} beers ready to import</span>
+  </div>`;
+  document.getElementById(containerId).innerHTML = html;
+}
+
+async function confirmImport(containerId) {
+  if (!importPreviewData.length) return;
+  const btn = document.querySelector(`#${containerId} .btn-primary`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+  let count = 0;
+  const batch = db.batch();
+  for (const b of importPreviewData) {
+    const vendorUid = b.vendorEmail ? (allVendors.find(v => v.email === b.vendorEmail)?.id || null) : null;
+    const ref = db.collection('beers').doc();
+    batch.set(ref, { brewery: b.brewery, name: b.name, style: b.style||'', abv: b.abv||null, description: b.description||'', tags: b.tags||[], stockStatus: 'live', vendorUid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    count++;
+    if (count % 400 === 0) { await batch.commit(); }
+  }
+  await batch.commit();
+  document.getElementById(containerId).innerHTML = `<div class="empty-state" style="padding:2rem"><div class="empty-state-icon">✅</div><div class="empty-state-title">${count} beers imported</div></div>`;
+  importPreviewData = [];
+  showToast(`${count} beers imported ✓`);
+  showSection('beers', document.querySelector('[data-section="beers"]'));
+}
+
+// ── NAV / SECTIONS ──
+function showSection(name, triggerEl) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec' + name.charAt(0).toUpperCase() + name.slice(1))?.classList.add('active');
+  document.querySelectorAll('.nav-item, .mn-item').forEach(el => el.classList.remove('active'));
+  if (triggerEl) {
+    triggerEl.classList.add('active');
+    document.querySelectorAll(`[data-section="${name}"]`).forEach(el => el.classList.add('active'));
+  }
+}
+
+function switchImportTab(tab, el) {
+  document.querySelectorAll('.imp-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.import-pane').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('imp' + tab.charAt(0).toUpperCase() + tab.slice(1))?.classList.add('active');
+}
+
+// ── MODALS ──
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-backdrop').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ── PAGES ──
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── TOAST ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Login enter key
+['loginEmail','loginPassword'].forEach(id => document.getElementById(id)?.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); }));
+</script>
+</body>
+</html>

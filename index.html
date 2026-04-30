@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" id="metaTheme" content="#111111">
+<title>Beer Festival</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --primary:#d4a843;
+  --primary-text:#000;
+  --bg:#111111;
+  --surface:#1c1c1c;
+  --surface2:#242424;
+  --border:#2a2a2a;
+  --text:#ffffff;
+  --sub:#888888;
+  --live:#4caf50;
+  --low:#ff9800;
+  --sold:#555;
+  --sold-text:#666;
+  --radius:14px;
+  --safe-top:env(safe-area-inset-top);
+  --safe-bottom:env(safe-area-inset-bottom);
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column}
+
+/* ── SPLASH ── */
+#splash{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:999;transition:opacity .4s
+}
+#splash.hide{opacity:0;pointer-events:none}
+.splash-logo{max-width:180px;max-height:80px;object-fit:contain;margin-bottom:1.5rem;filter:brightness(0) invert(1)}
+.splash-logo.hidden{display:none}
+.splash-name{font-size:1.8rem;font-weight:900;color:var(--primary);letter-spacing:.02em;margin-bottom:.5rem;text-align:center;padding:0 2rem}
+.splash-tagline{font-size:.85rem;color:var(--sub);text-align:center}
+.splash-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin-top:2.5rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── HEADER ── */
+header{
+  flex-shrink:0;
+  background:var(--bg);
+  padding:calc(.85rem + var(--safe-top)) 1rem .6rem;
+  border-bottom:1px solid var(--border);
+  position:relative;z-index:50
+}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem}
+#festLogo{max-height:36px;max-width:140px;object-fit:contain;filter:brightness(0) invert(1);display:none}
+#festName{font-size:1.05rem;font-weight:900;color:var(--primary);letter-spacing:.03em}
+.hdr-right{display:flex;align-items:center;gap:.75rem}
+.count-pill{
+  background:var(--surface2);border:1px solid var(--border);
+  padding:.25rem .7rem;border-radius:20px;font-size:.72rem;color:var(--sub);font-weight:600
+}
+.count-pill span{color:var(--primary)}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-top:.3rem}
+.tab{
+  flex:1;padding:.55rem .5rem;text-align:center;font-size:.8rem;font-weight:700;
+  color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;
+  transition:all .2s;letter-spacing:.04em;text-transform:uppercase
+}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--primary);color:var(--primary-text);
+  width:18px;height:18px;border-radius:50%;font-size:.62rem;font-weight:900;
+  margin-left:.35rem;vertical-align:middle
+}
+.tab-badge.hidden{display:none}
+
+/* ── MAIN SCROLL ── */
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg)}
+
+/* ── DISCOVER CONTROLS ── */
+.controls{
+  padding:.75rem 1rem .5rem;background:var(--bg);
+  position:sticky;top:0;z-index:40;border-bottom:1px solid var(--border)
+}
+.search-wrap{position:relative}
+.search-icon{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);font-size:.9rem;opacity:.4;pointer-events:none}
+.search-input{
+  width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:10px;
+  padding:.65rem 2.5rem .65rem 2.5rem;color:var(--text);font-size:.9rem;font-family:'Inter',sans-serif;
+  transition:border-color .2s
+}
+.search-input:focus{outline:none;border-color:var(--primary)}
+.search-input::placeholder{color:var(--sub)}
+.search-clear{
+  position:absolute;right:.75rem;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:var(--sub);font-size:1rem;cursor:pointer;
+  padding:.25rem;display:none
+}
+.filters{
+  display:flex;gap:.45rem;overflow-x:auto;scrollbar-width:none;
+  padding-top:.6rem;padding-bottom:2px
+}
+.filters::-webkit-scrollbar{display:none}
+.chip{
+  flex-shrink:0;background:var(--surface);border:1.5px solid var(--border);
+  border-radius:20px;padding:.3rem .85rem;font-size:.75rem;font-weight:600;
+  white-space:nowrap;cursor:pointer;color:var(--sub);transition:all .15s
+}
+.chip.active{background:var(--primary);border-color:var(--primary);color:var(--primary-text)}
+
+/* ── BEER LIST ── */
+#discoverList,#myList,#triedList{padding:.5rem 1rem 6rem}
+.brewery-hdr{
+  font-size:.65rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--primary);padding:.9rem 0 .35rem;margin-bottom:.35rem;
+  border-bottom:1px solid var(--border)
+}
+.beer-card{
+  background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);
+  padding:.75rem .9rem;margin-bottom:.5rem;
+  display:flex;align-items:center;gap:.75rem;
+  transition:opacity .3s,border-color .2s;
+  border-left:3px solid transparent
+}
+.beer-card.listed{border-left-color:var(--primary)}
+.beer-card.tried{border-left-color:var(--live);opacity:.75}
+.beer-card.soldout{opacity:.45}
+.beer-info{flex:1;min-width:0}
+.beer-brewery{font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sub);margin-bottom:.15rem}
+.beer-name{font-size:.95rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.beer-meta{font-size:.75rem;color:var(--sub);margin-top:.15rem}
+.badge-row{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.35rem;align-items:center}
+.tag{font-size:.6rem;padding:.1rem .38rem;border-radius:5px;border:1px solid var(--border);color:var(--sub);text-transform:uppercase;letter-spacing:.05em}
+.tag.gf{color:#4caf50;border-color:rgba(76,175,80,.4)}
+.tag.vegan{color:#8bc34a;border-color:rgba(139,195,74,.4)}
+.tag.lo{color:#ce93d8;border-color:rgba(206,147,216,.4)}
+.stock-badge{
+  font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  padding:.15rem .5rem;border-radius:5px;white-space:nowrap
+}
+.stock-live{background:rgba(76,175,80,.15);color:var(--live);border:1px solid rgba(76,175,80,.3)}
+.stock-low{background:rgba(255,152,0,.15);color:var(--low);border:1px solid rgba(255,152,0,.3)}
+.stock-sold{background:rgba(100,100,100,.15);color:#666;border:1px solid rgba(100,100,100,.2)}
+.beer-actions{display:flex;flex-direction:column;gap:.4rem;flex-shrink:0}
+.btn-list{
+  width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);
+  background:none;color:var(--sub);font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s
+}
+.btn-list:hover,.btn-list.active{background:var(--primary);border-color:var(--primary);color:var(--primary-text)}
+.btn-tried{
+  width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border);
+  background:none;color:var(--sub);font-size:.8rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s
+}
+.btn-tried.active{background:var(--live);border-color:var(--live);color:#fff}
+
+/* ── EMPTY STATES ── */
+.empty{
+  text-align:center;padding:4rem 2rem;color:var(--sub)
+}
+.empty-icon{font-size:3rem;margin-bottom:1rem;opacity:.4}
+.empty-title{font-size:1rem;font-weight:700;margin-bottom:.4rem;color:var(--text)}
+.empty-sub{font-size:.83rem;line-height:1.6}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:calc(1.5rem + var(--safe-bottom));left:50%;
+  transform:translateX(-50%) translateY(10px);
+  background:var(--surface2);border:1px solid var(--border);
+  padding:.6rem 1.25rem;border-radius:30px;font-size:.8rem;font-weight:600;
+  opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;z-index:200
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <img id="splashLogo" class="splash-logo hidden" src="" alt="">
+  <div id="splashName" class="splash-name">Loading…</div>
+  <div id="splashTagline" class="splash-tagline"></div>
+  <div class="splash-spinner"></div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="hdr-top">
+    <div style="display:flex;align-items:center;gap:.75rem">
+      <img id="festLogo" src="" alt="">
+      <div id="festName"></div>
+    </div>
+    <div class="hdr-right">
+      <div class="count-pill" id="beerCountPill"><span id="beerCount">0</span> beers</div>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-tab="discover">Discover</div>
+    <div class="tab" data-tab="mylist">My List <span class="tab-badge hidden" id="listBadge">0</span></div>
+    <div class="tab" data-tab="tried">Tried <span class="tab-badge hidden" id="triedBadge">0</span></div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main id="main">
+
+  <!-- DISCOVER TAB -->
+  <div id="tabDiscover">
+    <div class="controls">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="searchInput" type="search" placeholder="Search beers or breweries…">
+        <button class="search-clear" id="searchClear">✕</button>
+      </div>
+      <div class="filters" id="filterChips"></div>
+    </div>
+    <div id="discoverList"></div>
+  </div>
+
+  <!-- MY LIST TAB -->
+  <div id="tabMylist" style="display:none">
+    <div id="myList"></div>
+  </div>
+
+  <!-- TRIED TAB -->
+  <div id="tabTried" style="display:none">
+    <div id="triedList"></div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── FIREBASE INIT ──
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.firestore();
+
+// ── STATE ──
+let allBeers = [];
+let settings = {};
+let activeFilter = 'all';
+let activeTab = 'discover';
+const myList = new Set(JSON.parse(localStorage.getItem('bf_list') || '[]'));
+const triedSet = new Set(JSON.parse(localStorage.getItem('bf_tried') || '[]'));
+
+// ── SETTINGS LISTENER ──
+db.collection('settings').doc('main').onSnapshot(snap => {
+  if (!snap.exists) return;
+  settings = snap.data();
+  applyTheme(settings);
+  updateHeader(settings);
+  hideSplash();
+}, () => hideSplash());
+
+// ── BEERS LISTENER ──
+db.collection('beers').orderBy('brewery').onSnapshot(snap => {
+  allBeers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderDiscover();
+  renderMyList();
+  renderTried();
+  buildFilters();
+  document.getElementById('beerCount').textContent = allBeers.filter(b => b.stockStatus !== 'soldout').length;
+  hideSplash();
+});
+
+function applyTheme(s) {
+  const r = document.documentElement.style;
+  if (s.primaryColor)  r.setProperty('--primary',  s.primaryColor);
+  if (s.primaryText)   r.setProperty('--primary-text', s.primaryText);
+  if (s.bgColor)       r.setProperty('--bg',        s.bgColor);
+  if (s.surfaceColor)  r.setProperty('--surface',   s.surfaceColor);
+  if (s.surface2Color) r.setProperty('--surface2',  s.surface2Color);
+  if (s.borderColor)   r.setProperty('--border',    s.borderColor);
+  if (s.textColor)     r.setProperty('--text',      s.textColor);
+  if (s.primaryColor)  document.getElementById('metaTheme').content = s.bgColor || '#111111';
+}
+
+function updateHeader(s) {
+  document.title = s.festivalName || 'Beer Festival';
+  document.getElementById('splashName').textContent = s.festivalName || 'Beer Festival';
+  document.getElementById('splashTagline').textContent = s.tagline || '';
+  document.getElementById('festName').textContent = s.festivalName || 'Beer Festival';
+  if (s.logoUrl) {
+    const fl = document.getElementById('festLogo');
+    const sl = document.getElementById('splashLogo');
+    fl.src = s.logoUrl; fl.style.display = 'block';
+    sl.src = s.logoUrl; sl.classList.remove('hidden');
+    document.getElementById('festName').style.display = 'none';
+  }
+}
+
+let splashHidden = false;
+function hideSplash() {
+  if (splashHidden) return;
+  splashHidden = true;
+  const s = document.getElementById('splash');
+  s.classList.add('hide');
+  setTimeout(() => s.remove(), 500);
+}
+setTimeout(hideSplash, 4000);
+
+// ── FILTERS ──
+function buildFilters() {
+  const breweries = [...new Set(allBeers.map(b => b.brewery))].sort();
+  const wrap = document.getElementById('filterChips');
+  wrap.innerHTML = `<div class="chip active" data-f="all">All</div>` +
+    breweries.map(b => `<div class="chip" data-f="${b}">${b}</div>`).join('');
+  wrap.querySelectorAll('.chip').forEach(c =>
+    c.addEventListener('click', () => {
+      activeFilter = c.dataset.f;
+      wrap.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+      renderDiscover();
+    })
+  );
+}
+
+// ── SEARCH ──
+const searchInput = document.getElementById('searchInput');
+const searchClear = document.getElementById('searchClear');
+searchInput.addEventListener('input', () => {
+  searchClear.style.display = searchInput.value ? 'block' : 'none';
+  renderDiscover();
+});
+searchClear.addEventListener('click', () => {
+  searchInput.value = ''; searchClear.style.display = 'none'; renderDiscover();
+});
+
+function filteredBeers() {
+  const q = searchInput.value.toLowerCase().trim();
+  return allBeers.filter(b => {
+    const matchFilter = activeFilter === 'all' || b.brewery === activeFilter;
+    const matchSearch = !q || b.name.toLowerCase().includes(q) || b.brewery.toLowerCase().includes(q) || (b.style||'').toLowerCase().includes(q);
+    return matchFilter && matchSearch;
+  });
+}
+
+// ── RENDER ──
+function stockBadge(s) {
+  if (s === 'low')     return `<span class="stock-badge stock-low">Low Stock</span>`;
+  if (s === 'soldout') return `<span class="stock-badge stock-sold">Sold Out</span>`;
+  return `<span class="stock-badge stock-live">Available</span>`;
+}
+
+function tagBadges(tags) {
+  if (!tags || !tags.length) return '';
+  return tags.map(t => {
+    const labels = { gf:'GF', vegan:'Vegan', lo:'Low ABV' };
+    return `<span class="tag ${t}">${labels[t] || t}</span>`;
+  }).join('');
+}
+
+function beerCard(b, context) {
+  const listed = myList.has(b.id);
+  const tried  = triedSet.has(b.id);
+  const sold   = b.stockStatus === 'soldout';
+  return `
+  <div class="beer-card${listed?' listed':''}${tried?' tried':''}${sold?' soldout':''}" data-id="${b.id}">
+    <div class="beer-info">
+      <div class="beer-brewery">${b.brewery}</div>
+      <div class="beer-name">${b.name}</div>
+      <div class="beer-meta">${b.style || ''}${b.abv ? ` · ${b.abv}%` : ''}</div>
+      <div class="badge-row">
+        ${stockBadge(b.stockStatus)}
+        ${tagBadges(b.tags)}
+      </div>
+    </div>
+    <div class="beer-actions">
+      <button class="btn-list${listed?' active':''}" data-id="${b.id}" title="Save to list">${listed ? '♥' : '♡'}</button>
+      <button class="btn-tried${tried?' active':''}" data-id="${b.id}" title="Mark as tried">✓</button>
+    </div>
+  </div>`;
+}
+
+function renderDiscover() {
+  const beers = filteredBeers();
+  const list = document.getElementById('discoverList');
+  if (!beers.length) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🍺</div><div class="empty-title">No beers found</div><div class="empty-sub">Try a different search or filter</div></div>`;
+    return;
+  }
+  let html = ''; let lastBrewery = '';
+  beers.forEach(b => {
+    if (b.brewery !== lastBrewery && activeFilter === 'all' && !searchInput.value) {
+      html += `<div class="brewery-hdr">${b.brewery}</div>`;
+      lastBrewery = b.brewery;
+    }
+    html += beerCard(b, 'discover');
+  });
+  list.innerHTML = html;
+  attachCardListeners(list);
+}
+
+function renderMyList() {
+  const beers = allBeers.filter(b => myList.has(b.id));
+  const el = document.getElementById('myList');
+  const badge = document.getElementById('listBadge');
+  badge.textContent = beers.length;
+  badge.classList.toggle('hidden', beers.length === 0);
+  if (!beers.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">♡</div><div class="empty-title">Your list is empty</div><div class="empty-sub">Tap ♡ on any beer in Discover to save it here</div></div>`;
+    return;
+  }
+  el.innerHTML = beers.map(b => beerCard(b, 'mylist')).join('');
+  attachCardListeners(el);
+}
+
+function renderTried() {
+  const beers = allBeers.filter(b => triedSet.has(b.id));
+  const el = document.getElementById('triedList');
+  const badge = document.getElementById('triedBadge');
+  badge.textContent = beers.length;
+  badge.classList.toggle('hidden', beers.length === 0);
+  if (!beers.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">✓</div><div class="empty-title">Nothing tasted yet</div><div class="empty-sub">Tap ✓ on a beer once you've tried it</div></div>`;
+    return;
+  }
+  el.innerHTML = beers.map(b => beerCard(b, 'tried')).join('');
+  attachCardListeners(el);
+}
+
+function attachCardListeners(container) {
+  container.querySelectorAll('.btn-list').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); toggleList(btn.dataset.id); });
+  });
+  container.querySelectorAll('.btn-tried').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); toggleTried(btn.dataset.id); });
+  });
+}
+
+function toggleList(id) {
+  const beer = allBeers.find(b => b.id === id);
+  if (myList.has(id)) { myList.delete(id); showToast(`Removed from your list`); }
+  else { myList.add(id); showToast(`${beer?.name} added to your list`); }
+  localStorage.setItem('bf_list', JSON.stringify([...myList]));
+  renderDiscover(); renderMyList(); renderTried();
+}
+
+function toggleTried(id) {
+  const beer = allBeers.find(b => b.id === id);
+  if (triedSet.has(id)) { triedSet.delete(id); showToast('Unmarked'); }
+  else { triedSet.add(id); showToast(`${beer?.name} — nice one! ✓`); }
+  localStorage.setItem('bf_tried', JSON.stringify([...triedSet]));
+  renderDiscover(); renderMyList(); renderTried();
+}
+
+// ── TABS ──
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    activeTab = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tabDiscover').style.display = activeTab === 'discover' ? '' : 'none';
+    document.getElementById('tabMylist').style.display  = activeTab === 'mylist'   ? '' : 'none';
+    document.getElementById('tabTried').style.display   = activeTab === 'tried'    ? '' : 'none';
+    if (activeTab === 'mylist') renderMyList();
+    if (activeTab === 'tried')  renderTried();
+  });
+});
+
+// ── TOAST ──
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
