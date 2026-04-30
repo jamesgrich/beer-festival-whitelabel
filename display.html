@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" id="metaTheme" content="#0d0d0d">
+<title>Festival Display</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#d4a843;
+  --primary-text:#000;
+  --bg:#0d0d0d;
+  --panel:#141414;
+  --surface:#1a1a1a;
+  --border:#222;
+  --text:#fff;
+  --sub:#666;
+  --live:#4caf50;
+  --low:#ff9800;
+  --sold:#333;
+  --sold-text:#444;
+}
+html,body{
+  height:100%;background:var(--bg);color:var(--text);
+  font-family:'Inter',sans-serif;overflow:hidden
+}
+body{display:flex;flex-direction:column}
+
+/* ── HEADER ── */
+header{
+  flex-shrink:0;
+  background:var(--bg);
+  border-bottom:2px solid var(--border);
+  padding:1.25rem 3rem;
+  display:flex;align-items:center;justify-content:space-between
+}
+.hdr-left{display:flex;align-items:center;gap:1.5rem}
+#displayLogo{max-height:48px;max-width:180px;object-fit:contain;filter:brightness(0) invert(1);display:none}
+#displayName{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;letter-spacing:.06em;color:var(--primary)}
+.hdr-right{display:flex;align-items:center;gap:2rem}
+.hdr-stat{text-align:right}
+.hdr-stat-n{font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--primary);line-height:1}
+.hdr-stat-l{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sub);margin-top:.15rem}
+.live-dot{width:10px;height:10px;border-radius:50%;background:var(--live);animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}
+.hdr-time{font-family:'Bebas Neue',sans-serif;font-size:2.2rem;color:var(--sub);letter-spacing:.06em}
+
+/* ── LEGEND ── */
+.legend{
+  flex-shrink:0;background:var(--panel);border-bottom:1px solid var(--border);
+  padding:.6rem 3rem;display:flex;align-items:center;gap:2.5rem
+}
+.leg-item{display:flex;align-items:center;gap:.5rem;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sub)}
+.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.leg-dot.live{background:var(--live)}
+.leg-dot.low{background:var(--low)}
+.leg-dot.sold{background:#444}
+.leg-sep{flex:1}
+.filter-chips{display:flex;gap:.5rem;align-items:center}
+.fchip{
+  background:var(--surface);border:1px solid var(--border);border-radius:20px;
+  padding:.25rem .85rem;font-size:.68rem;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--sub);cursor:pointer;transition:all .15s
+}
+.fchip.active{background:var(--primary);border-color:var(--primary);color:var(--primary-text)}
+
+/* ── GRID ── */
+.grid-wrap{flex:1;overflow:hidden;padding:1.5rem 2rem;position:relative}
+.beer-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:1px;
+  background:var(--border);
+  height:100%;
+  overflow:hidden;
+  content-visibility:auto
+}
+.beer-tile{
+  background:var(--surface);
+  padding:1.4rem 1.6rem;
+  display:flex;flex-direction:column;justify-content:space-between;
+  position:relative;overflow:hidden;
+  transition:background .3s,opacity .3s
+}
+.beer-tile.soldout{background:#111;opacity:.45}
+.beer-tile::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--primary);transition:background .3s
+}
+.beer-tile.sold-border::before{background:#333}
+.beer-tile.low-border::before{background:var(--low)}
+
+.tile-top{}
+.tile-brewery{
+  font-size:.65rem;font-weight:900;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--sub);margin-bottom:.35rem
+}
+.tile-name{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(1.3rem,2.2vw,1.8rem);
+  letter-spacing:.03em;line-height:1;
+  color:var(--text);margin-bottom:.3rem
+}
+.tile-style{font-size:.75rem;color:var(--sub);font-weight:400}
+
+.tile-bottom{
+  display:flex;align-items:flex-end;justify-content:space-between;
+  margin-top:.85rem;gap:.75rem
+}
+.tile-abv{
+  font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.05em;
+  color:var(--primary);line-height:1
+}
+.tile-abv-label{font-size:.55rem;color:var(--sub);letter-spacing:.1em;text-transform:uppercase;margin-top:.1rem}
+.tile-stock{
+  display:flex;align-items:center;gap:.45rem;
+  font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase
+}
+.tile-stock-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.stock-live .tile-stock-dot{background:var(--live)}
+.stock-live .tile-stock-text{color:var(--live)}
+.stock-low .tile-stock-dot{background:var(--low);animation:pulse 1.5s infinite}
+.stock-low .tile-stock-text{color:var(--low)}
+.stock-soldout .tile-stock-dot{background:#444}
+.stock-soldout .tile-stock-text{color:#555}
+
+/* Sold out cross-through on name */
+.beer-tile.soldout .tile-name{
+  text-decoration:line-through;text-decoration-color:#444;color:#444
+}
+
+/* ── TICKER ── */
+.ticker{
+  flex-shrink:0;background:var(--primary);padding:.5rem 0;overflow:hidden;
+  white-space:nowrap;border-top:1px solid rgba(0,0,0,.2)
+}
+.ticker-inner{display:inline-block;animation:tick 40s linear infinite;font-size:.72rem;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--primary-text)}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tsep{margin:0 1.5rem;opacity:.3}
+
+/* ── EMPTY ── */
+.no-beers{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--sub);gap:1rem
+}
+.no-beers-icon{font-size:4rem;opacity:.3}
+.no-beers-text{font-size:1rem;font-weight:700}
+
+/* ── AUTO-SCROLL indicator ── */
+.scroll-indicator{
+  position:fixed;bottom:3rem;right:2rem;
+  background:rgba(0,0,0,.8);border:1px solid var(--border);border-radius:30px;
+  padding:.4rem 1rem;font-size:.65rem;color:var(--sub);letter-spacing:.1em;
+  text-transform:uppercase;display:flex;align-items:center;gap:.4rem;
+  opacity:0;transition:opacity .5s;pointer-events:none
+}
+.scroll-indicator.visible{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="hdr-left">
+    <div class="live-dot"></div>
+    <img id="displayLogo" src="" alt="">
+    <div id="displayName">Beer Festival</div>
+  </div>
+  <div class="hdr-right">
+    <div class="hdr-stat">
+      <div class="hdr-stat-n" id="availCount">—</div>
+      <div class="hdr-stat-l">Available</div>
+    </div>
+    <div class="hdr-stat">
+      <div class="hdr-stat-n" id="lowCount" style="color:var(--low)">—</div>
+      <div class="hdr-stat-l">Low Stock</div>
+    </div>
+    <div class="hdr-stat">
+      <div class="hdr-stat-n" id="soldCount" style="color:#444">—</div>
+      <div class="hdr-stat-l">Sold Out</div>
+    </div>
+    <div class="hdr-time" id="clock">—</div>
+  </div>
+</header>
+
+<!-- LEGEND + FILTER -->
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot live"></div>Available</div>
+  <div class="leg-item"><div class="leg-dot low"></div>Low Stock</div>
+  <div class="leg-item"><div class="leg-dot sold"></div>Sold Out</div>
+  <div class="leg-sep"></div>
+  <div class="filter-chips" id="filterChips">
+    <div class="fchip active" data-f="all">All Breweries</div>
+  </div>
+</div>
+
+<!-- BEER GRID -->
+<div class="grid-wrap">
+  <div class="beer-grid" id="beerGrid">
+    <div class="no-beers"><div class="no-beers-icon">🍺</div><div class="no-beers-text">Loading beers…</div></div>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="ticker" id="ticker" style="display:none">
+  <span class="ticker-inner" id="tickerInner"></span>
+</div>
+
+<div class="scroll-indicator" id="scrollIndicator">↑ Scrolling</div>
+
+<script>
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.firestore();
+
+let allBeers = [];
+let activeFilter = 'all';
+let breweries = [];
+let autoScrollDir = 1;
+let autoScrollTimer = null;
+let pauseScroll = false;
+
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2,'0');
+  const m = now.getMinutes().toString().padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}:${m}`;
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+// ── SETTINGS ──
+db.collection('settings').doc('main').onSnapshot(snap => {
+  if (!snap.exists) return;
+  const s = snap.data();
+  applyTheme(s);
+  if (s.festivalName) {
+    document.getElementById('displayName').textContent = s.festivalName;
+    document.title = s.festivalName + ' — Display';
+  }
+  if (s.logoUrl) {
+    const logo = document.getElementById('displayLogo');
+    logo.src = s.logoUrl; logo.style.display = 'block';
+    document.getElementById('displayName').style.display = 'none';
+  }
+});
+
+function applyTheme(s) {
+  const r = document.documentElement.style;
+  if (s.primaryColor)  r.setProperty('--primary',       s.primaryColor);
+  if (s.primaryText)   r.setProperty('--primary-text',  s.primaryText);
+  if (s.bgColor)       r.setProperty('--bg',            s.bgColor);
+  if (s.surfaceColor)  r.setProperty('--surface',       s.surfaceColor);
+  if (s.textColor)     r.setProperty('--text',          s.textColor);
+}
+
+// ── BEERS ──
+db.collection('beers').orderBy('brewery').onSnapshot(snap => {
+  allBeers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  breweries = [...new Set(allBeers.map(b => b.brewery))].sort();
+  updateStats();
+  buildFilters();
+  buildTicker();
+  renderGrid();
+});
+
+function updateStats() {
+  document.getElementById('availCount').textContent = allBeers.filter(b => b.stockStatus === 'live').length;
+  document.getElementById('lowCount').textContent   = allBeers.filter(b => b.stockStatus === 'low').length;
+  document.getElementById('soldCount').textContent  = allBeers.filter(b => b.stockStatus === 'soldout').length;
+}
+
+function buildFilters() {
+  const wrap = document.getElementById('filterChips');
+  wrap.innerHTML = `<div class="fchip active" data-f="all">All Breweries</div>` +
+    breweries.map(b => `<div class="fchip" data-f="${b}">${b}</div>`).join('');
+  wrap.querySelectorAll('.fchip').forEach(c => c.addEventListener('click', () => {
+    activeFilter = c.dataset.f;
+    wrap.querySelectorAll('.fchip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    renderGrid();
+    resetAutoScroll();
+  }));
+}
+
+function buildTicker() {
+  const tickerEl = document.getElementById('ticker');
+  const inner    = document.getElementById('tickerInner');
+  if (!breweries.length) { tickerEl.style.display = 'none'; return; }
+  const text = breweries.join('<span class="tsep">·</span>') + '<span class="tsep">·</span>';
+  inner.innerHTML = text + text;
+  tickerEl.style.display = 'block';
+}
+
+function renderGrid() {
+  const beers = activeFilter === 'all' ? allBeers : allBeers.filter(b => b.brewery === activeFilter);
+  const grid  = document.getElementById('beerGrid');
+
+  if (!beers.length) {
+    grid.innerHTML = `<div class="no-beers" style="grid-column:1/-1"><div class="no-beers-icon">🍺</div><div class="no-beers-text">No beers to display</div></div>`;
+    return;
+  }
+
+  // Sort: live first, low stock second, sold out last; alphabetical within each group
+  const sorted = [...beers].sort((a, b) => {
+    const order = { live:0, low:1, soldout:2 };
+    const ao = order[a.stockStatus||'live'] ?? 0;
+    const bo = order[b.stockStatus||'live'] ?? 0;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name);
+  });
+
+  grid.innerHTML = sorted.map(b => {
+    const ss    = b.stockStatus || 'live';
+    const sold  = ss === 'soldout';
+    const low   = ss === 'low';
+    const stockLabel  = ss === 'live' ? 'Available' : ss === 'low' ? 'Low Stock' : 'Sold Out';
+    return `
+    <div class="beer-tile ${sold?'soldout':''} ${low?'low-border':''} ${sold?'sold-border':''} stock-${ss}">
+      <div class="tile-top">
+        <div class="tile-brewery">${b.brewery}</div>
+        <div class="tile-name">${b.name}</div>
+        <div class="tile-style">${b.style||''}</div>
+      </div>
+      <div class="tile-bottom">
+        ${b.abv ? `<div><div class="tile-abv">${b.abv}%</div><div class="tile-abv-label">ABV</div></div>` : '<div></div>'}
+        <div class="tile-stock">
+          <div class="tile-stock-dot"></div>
+          <span class="tile-stock-text">${stockLabel}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  startAutoScroll();
+}
+
+// ── AUTO SCROLL (for large lists) ──
+function startAutoScroll() {
+  stopAutoScroll();
+  const wrap = document.querySelector('.grid-wrap');
+  if (!wrap || wrap.scrollHeight <= wrap.clientHeight) return;
+  const indicator = document.getElementById('scrollIndicator');
+  let scrollPos = 0;
+  const speed = 0.6; // px per frame
+
+  function step() {
+    if (pauseScroll) { autoScrollTimer = requestAnimationFrame(step); return; }
+    scrollPos += speed * autoScrollDir;
+    const max = wrap.scrollHeight - wrap.clientHeight;
+    if (scrollPos >= max) { scrollPos = max; autoScrollDir = -1; indicator.textContent = '↓ Scrolling'; indicator.classList.add('visible'); setTimeout(() => indicator.classList.remove('visible'), 1500); }
+    if (scrollPos <= 0)   { scrollPos = 0;   autoScrollDir = 1;  indicator.textContent = '↑ Scrolling'; }
+    wrap.scrollTop = scrollPos;
+    autoScrollTimer = requestAnimationFrame(step);
+  }
+  autoScrollTimer = requestAnimationFrame(step);
+
+  wrap.addEventListener('mouseenter', () => { pauseScroll = true; });
+  wrap.addEventListener('mouseleave', () => { pauseScroll = false; });
+}
+
+function stopAutoScroll() {
+  if (autoScrollTimer) { cancelAnimationFrame(autoScrollTimer); autoScrollTimer = null; }
+}
+
+function resetAutoScroll() {
+  const wrap = document.querySelector('.grid-wrap');
+  if (wrap) wrap.scrollTop = 0;
+  autoScrollDir = 1;
+  startAutoScroll();
+}
+
+// ── FULLSCREEN on click ──
+document.body.addEventListener('dblclick', () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  else document.exitFullscreen();
+});
+</script>
+</body>
+</html>
