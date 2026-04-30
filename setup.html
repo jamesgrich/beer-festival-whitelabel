@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Festival App — Setup Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--amber:#d4a843;--bg:#0f0f0f;--panel:#161616;--card:#1e1e1e;--border:#2c2c2c;--text:#fff;--sub:#888;--green:#4caf50;--radius:12px}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:15px;line-height:1.6}
+a{color:var(--amber)}
+
+.page{max-width:780px;margin:0 auto;padding:3rem 2rem 6rem}
+
+/* HEADER */
+.guide-header{text-align:center;margin-bottom:4rem;padding-bottom:3rem;border-bottom:1px solid var(--border)}
+.guide-eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--amber);margin-bottom:1rem}
+.guide-title{font-size:2.4rem;font-weight:900;margin-bottom:.75rem;line-height:1.1}
+.guide-sub{color:var(--sub);font-size:.95rem;max-width:520px;margin:0 auto}
+
+/* STEP */
+.step{display:flex;gap:1.5rem;margin-bottom:2.5rem}
+.step-num{
+  width:36px;height:36px;border-radius:50%;background:var(--amber);color:#000;
+  font-weight:900;font-size:.9rem;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:.1rem
+}
+.step-body{flex:1}
+.step-title{font-size:1rem;font-weight:800;margin-bottom:.4rem}
+.step-desc{font-size:.87rem;color:var(--sub);line-height:1.75}
+.step-desc strong{color:var(--text)}
+.step-desc code{background:var(--card);border:1px solid var(--border);border-radius:5px;padding:.1rem .4rem;font-size:.82rem;font-family:monospace;color:var(--amber)}
+
+/* SECTION HEADING */
+.section-heading{
+  font-size:.68rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--amber);margin:3rem 0 1.5rem;padding-bottom:.6rem;border-bottom:1px solid var(--border)
+}
+
+/* CODE BLOCK */
+.code-block{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:1.25rem 1.5rem;font-family:monospace;font-size:.82rem;line-height:1.8;
+  overflow-x:auto;margin:1rem 0;color:#ccc
+}
+.code-block .key{color:var(--amber)}
+.code-block .val{color:#7ec8a4}
+.code-block .comment{color:#555}
+
+/* FIRESTORE RULES */
+.rules-block{
+  background:#0a0a0a;border:1px solid var(--border);border-radius:var(--radius);
+  padding:1.25rem 1.5rem;font-family:monospace;font-size:.78rem;line-height:1.9;
+  overflow-x:auto;color:#aaa;margin:1rem 0;white-space:pre
+}
+
+/* INFO BOX */
+.info-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:1rem 0;font-size:.84rem;color:var(--sub);line-height:1.7}
+.info-box strong{color:var(--text)}
+.info-box.tip{border-left:3px solid var(--amber)}
+.info-box.warn{border-left:3px solid #ff9800}
+.info-box.success{border-left:3px solid var(--green)}
+
+/* ROLE TABLE */
+.role-table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.84rem}
+.role-table th{background:var(--card);padding:.6rem 1rem;text-align:left;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sub);border-bottom:2px solid var(--border)}
+.role-table td{padding:.7rem 1rem;border-bottom:1px solid var(--border);vertical-align:top}
+.role-table tr:last-child td{border-bottom:none}
+.yes{color:var(--green);font-weight:700}
+.no{color:#444}
+
+/* FILE LIST */
+.file-list{display:flex;flex-direction:column;gap:.5rem;margin:1rem 0}
+.file-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.85rem 1.1rem;display:flex;align-items:flex-start;gap:.85rem}
+.file-icon{font-size:1.2rem;margin-top:.05rem}
+.file-name{font-family:monospace;font-weight:700;font-size:.88rem;color:var(--amber);margin-bottom:.2rem}
+.file-desc{font-size:.8rem;color:var(--sub)}
+
+/* FOOTER */
+.guide-footer{text-align:center;padding-top:3rem;border-top:1px solid var(--border);font-size:.8rem;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="guide-header">
+    <div class="guide-eyebrow">Deployment Guide</div>
+    <h1 class="guide-title">Beer Festival App<br>Setup Guide</h1>
+    <p class="guide-sub">Everything you need to get the festival app live — from Firebase setup to handing over to the festival team. Should take about 20 minutes.</p>
+  </div>
+
+  <!-- WHAT YOU HAVE -->
+  <div class="section-heading">What You Have</div>
+
+  <div class="file-list">
+    <div class="file-item">
+      <div class="file-icon">📱</div>
+      <div><div class="file-name">index.html</div><div class="file-desc">The public-facing app. Festival attendees use this on their phones to browse beers, save a list, and see live stock status.</div></div>
+    </div>
+    <div class="file-item">
+      <div class="file-icon">🔧</div>
+      <div><div class="file-name">admin.html</div><div class="file-desc">The staff portal. Admins configure the festival, import beers and manage vendors. Vendors log in here to update their stock levels.</div></div>
+    </div>
+    <div class="file-item">
+      <div class="file-icon">⚙️</div>
+      <div><div class="file-name">config.js</div><div class="file-desc">The only file you need to edit. Paste your Firebase project credentials here once and you're done.</div></div>
+    </div>
+  </div>
+
+  <!-- USER ROLES -->
+  <div class="section-heading">User Roles</div>
+
+  <table class="role-table">
+    <thead><tr><th>Can do this…</th><th>Admin</th><th>Vendor</th></tr></thead>
+    <tbody>
+      <tr><td>Set festival name, colours, logo</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td>Import beers (CSV / Image / Paste)</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td>Add, edit, delete any beer</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td>Create and manage vendor accounts</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td>Update stock status (all beers)</td><td class="yes">✓</td><td class="no">✗</td></tr>
+      <tr><td>Update stock status (their brewery only)</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+    </tbody>
+  </table>
+
+  <!-- STEP 1 — FIREBASE -->
+  <div class="section-heading">Step 1 — Create a Firebase Project</div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Go to Firebase Console</div>
+      <div class="step-desc">Visit <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> and sign in with a Google account. Click <strong>Add project</strong>, give it a name (e.g. <em>norwich-craft-beer-fest-2026</em>), and click through to create it. You don't need Google Analytics.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-title">Enable Firestore Database</div>
+      <div class="step-desc">In the left sidebar, click <strong>Build → Firestore Database → Create database</strong>. Choose <strong>Start in production mode</strong>. Pick the closest region (europe-west2 for UK). Click Enable.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-title">Enable Authentication</div>
+      <div class="step-desc">In the sidebar, click <strong>Build → Authentication → Get started</strong>. Under Sign-in method, enable <strong>Email/Password</strong>. Save.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <div class="step-title">Get your config and paste it into config.js</div>
+      <div class="step-desc">Go to <strong>Project Settings</strong> (the gear icon) → <strong>General</strong> → scroll down to <strong>Your apps</strong> → click the web icon (<code>&lt;/&gt;</code>) → Register app → copy the <code>firebaseConfig</code> object. Open <code>config.js</code> and replace the placeholder values:</div>
+      <div class="code-block"><span class="comment">// config.js</span>
+<span class="key">const FIREBASE_CONFIG</span> = {
+  <span class="key">apiKey:</span>            <span class="val">"AIzaSyAbc123..."</span>,
+  <span class="key">authDomain:</span>        <span class="val">"your-project.firebaseapp.com"</span>,
+  <span class="key">projectId:</span>         <span class="val">"your-project"</span>,
+  <span class="key">storageBucket:</span>     <span class="val">"your-project.appspot.com"</span>,
+  <span class="key">messagingSenderId:</span> <span class="val">"123456789"</span>,
+  <span class="key">appId:</span>             <span class="val">"1:123456789:web:abc..."</span>
+};</div>
+    </div>
+  </div>
+
+  <!-- STEP 2 — SECURITY RULES -->
+  <div class="section-heading">Step 2 — Set Firestore Security Rules</div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <div class="step-title">Paste the security rules</div>
+      <div class="step-desc">In Firestore, click the <strong>Rules</strong> tab. Replace everything with the rules below and click <strong>Publish</strong>. These ensure the public app can read beers, but only authorised staff can make changes.</div>
+      <div class="rules-block">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /settings/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /beers/{beerId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || isVendorOf(beerId);
+    }
+    match /users/{uid} {
+      allow read: if request.auth.uid == uid || isAdmin();
+      allow write: if isAdmin();
+      allow create: if request.auth.uid == uid;
+    }
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    function isVendorOf(beerId) {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/beers/$(beerId)).data.vendorUid == request.auth.uid;
+    }
+  }
+}</div>
+    </div>
+  </div>
+
+  <!-- STEP 3 — FIRST ADMIN -->
+  <div class="section-heading">Step 3 — Create the First Admin Account</div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <div class="step-title">Create the admin user in Firebase Authentication</div>
+      <div class="step-desc">Go to <strong>Authentication → Users → Add user</strong>. Enter the admin's email and a strong password. Click Add User. <strong>Copy the UID</strong> shown in the user list (looks like: <code>abc123XYZ789…</code>).</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">7</div>
+    <div class="step-body">
+      <div class="step-title">Create their user document in Firestore</div>
+      <div class="step-desc">Go to <strong>Firestore → Start collection</strong>. Collection ID: <code>users</code>. Document ID: paste the UID from step 6. Add these three fields:</div>
+      <div class="code-block"><span class="key">role</span>        (string)  →  <span class="val">"admin"</span>
+<span class="key">email</span>       (string)  →  <span class="val">"admin@festival.com"</span>
+<span class="key">displayName</span> (string)  →  <span class="val">"Festival Admin"</span></div>
+      <div class="info-box tip" style="margin-top:.75rem">That's the only manual Firestore entry you'll ever need to make. All future users are created through the admin portal itself.</div>
+    </div>
+  </div>
+
+  <!-- STEP 4 — DEPLOY -->
+  <div class="section-heading">Step 4 — Deploy to Netlify</div>
+
+  <div class="step">
+    <div class="step-num">8</div>
+    <div class="step-body">
+      <div class="step-title">Deploy the three files</div>
+      <div class="step-desc">Go to <a href="https://netlify.com" target="_blank">netlify.com</a>, sign up free, and drag the whole project folder onto the deploy area. Done. You'll get a URL like <code>https://your-festival.netlify.app</code>.<br><br>To use a custom domain (e.g. <code>app.norwichcraftbeerfest.co.uk</code>), go to <strong>Site settings → Domain management</strong> and follow the instructions.</div>
+    </div>
+  </div>
+
+  <div class="info-box success">
+    <strong>You're live.</strong> The public app is at <code>/index.html</code> and the staff portal is at <code>/admin.html</code>. Share the public URL with attendees and the admin URL with the festival team.
+  </div>
+
+  <!-- STEP 5 — HAND OVER -->
+  <div class="section-heading">Step 5 — Festival Setup (Admin does this)</div>
+
+  <div class="step">
+    <div class="step-num">9</div>
+    <div class="step-body">
+      <div class="step-title">Configure the festival look and feel</div>
+      <div class="step-desc">The admin logs into <code>/admin.html</code>, goes to <strong>Settings</strong>, and sets the festival name, tagline, logo, and colour scheme. Changes go live to the public app immediately.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">10</div>
+    <div class="step-body">
+      <div class="step-title">Import the beer list</div>
+      <div class="step-desc">Go to <strong>Import</strong>. Three options:<br><br>
+        <strong>CSV</strong> — easiest for a spreadsheet. Columns: <code>brewery, name, style, abv, description, tags, vendor_email</code><br><br>
+        <strong>Image</strong> — photograph or scan the printed beer list and upload it. Requires a Claude API key (get one free at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>). The AI extracts all the beers automatically.<br><br>
+        <strong>Paste text</strong> — copy text from a PDF or type it in. One beer per line, format: <code>Brewery – Name – Style – ABV%</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">11</div>
+    <div class="step-body">
+      <div class="step-title">Add vendor accounts for each brewery</div>
+      <div class="step-desc">Go to <strong>Vendors → Add Vendor</strong>. Enter the brewery's name, email, a temporary password, and which brewery they manage. They'll log into <code>/admin.html</code> with those credentials and only see their own beers.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">12</div>
+    <div class="step-body">
+      <div class="step-title">Assign beers to vendors</div>
+      <div class="step-desc">In the <strong>Beers</strong> section, click <strong>Edit</strong> on any beer and set the <em>Assigned Vendor</em> dropdown. Or, include a <code>vendor_email</code> column in your CSV import and it's done automatically.</div>
+    </div>
+  </div>
+
+  <!-- ON THE DAY -->
+  <div class="section-heading">On the Day</div>
+
+  <div class="info-box tip">
+    <strong>For vendors:</strong> Send them the link to <code>/admin.html</code> and their email + password. On their phone, they'll see only their beers and a simple dropdown: 🟢 Available → 🟡 Low Stock → 🔴 Sold Out. That's it.
+  </div>
+
+  <div class="info-box tip" style="margin-top:.75rem">
+    <strong>For attendees:</strong> Share the link to <code>/index.html</code>. Works on any smartphone browser, no app download needed. They can save a tasting list and see stock status update in real time as bars sell out.
+  </div>
+
+  <div class="info-box warn" style="margin-top:.75rem">
+    <strong>Reusing next year:</strong> Before the festival, delete all beers from the Beers section (or use a new Firebase project) and re-import the new year's list. The colours, name and vendor accounts will all still be there.
+  </div>
+
+  <div class="guide-footer">
+    Built by James Richardson · Questions? Get in touch.
+  </div>
+
+</div>
+</body>
+</html>

@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Festival Admin</title>
+<meta name="theme-color" id="metaTheme" content="#0f0f0f">
+<title>Staff Sign In</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -281,8 +282,9 @@ input,select,textarea,button{font-family:'Inter',sans-serif}
 ════════════════════════════════════════════════════════════ -->
 <div id="loginPage" class="page active">
   <div class="login-box">
-    <div class="login-title">🍺 Festival Admin</div>
-    <div class="login-sub">Sign in to manage your event</div>
+    <img id="loginLogo" src="" alt="" style="max-height:52px;max-width:160px;object-fit:contain;display:none;margin:0 auto 1rem;filter:brightness(0) invert(1)">
+    <div class="login-title" id="loginTitle">🍺 Staff Sign In</div>
+    <div class="login-sub" id="loginSub">Sign in to your account</div>
     <div class="form-group">
       <label class="form-label">Email</label>
       <input class="form-input" id="loginEmail" type="email" placeholder="admin@festival.com" autocomplete="email">
@@ -641,6 +643,25 @@ let allVendors = [];
 let beersUnsubscribe = null;
 let editingBeerId = null;
 let importPreviewData = [];
+
+// ── LOAD SETTINGS ON LOGIN SCREEN ──
+db.collection('settings').doc('main').get().then(snap => {
+  if (!snap.exists) return;
+  const s = snap.data();
+  if (s.festivalName) {
+    document.getElementById('loginTitle').textContent = s.festivalName;
+    document.title = s.festivalName + ' — Staff Sign In';
+  }
+  if (s.logoUrl) {
+    const logo = document.getElementById('loginLogo');
+    logo.src = s.logoUrl; logo.style.display = 'block';
+    document.getElementById('loginTitle').style.display = 'none';
+  }
+  if (s.primaryColor) {
+    document.documentElement.style.setProperty('--primary', s.primaryColor);
+    document.getElementById('metaTheme') && (document.getElementById('metaTheme').content = s.bgColor || '#0f0f0f');
+  }
+}).catch(() => {});
 
 // ── AUTH ──
 auth.onAuthStateChanged(async user => {
